@@ -3,7 +3,8 @@ import { useApp } from '../../context/AppContext';
 import { Company, Profile, GlobalSetting } from '../../types';
 import { 
   Building, Shield, Users, Clock, AlertTriangle, 
-  Settings, LogOut, Check, X, Plus, ShieldAlert, Trash2, Key, Video
+  Settings, LogOut, Check, X, Plus, ShieldAlert, Trash2, Key, Video,
+  Pencil, UserCheck, Lock, Unlock
 } from 'lucide-react';
 
 export const SuperAdminPage: React.FC = () => {
@@ -321,36 +322,42 @@ export const SuperAdminPage: React.FC = () => {
                             {comp.status.toUpperCase()}
                           </span>
                         </td>
-                        <td className="px-4 py-3.5 text-right space-x-2">
-                          <button
-                            onClick={() => openAdminModal(comp.id)}
-                            className="text-brand-maroon hover:text-brand-maroon/80 font-bold hover:underline"
-                          >
-                            Asignar Admin
-                          </button>
-                          <button
-                            onClick={() => handleToggleBlock(comp.id)}
-                            className={`font-bold hover:underline ${
-                              comp.status === 'active' ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'
-                            }`}
-                          >
-                            {comp.status === 'active' ? 'Bloquear' : 'Desbloquear'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setPurgeTargetCompanyId(comp.id);
-                              setShowPurgeModal(true);
-                            }}
-                            className="text-red-600 hover:text-red-700 font-bold hover:underline"
-                          >
-                            Purgar
-                          </button>
-                          <button
-                            onClick={() => openCompanyModal(comp)}
-                            className="text-brand-maroon hover:text-brand-maroon/80 font-bold hover:underline"
-                          >
-                            Editar
-                          </button>
+                        <td className="px-4 py-3.5 text-right">
+                          <div className="flex justify-end gap-1.5">
+                            <button
+                              onClick={() => openAdminModal(comp.id)}
+                              className="p-1.5 text-brand-maroon hover:bg-brand-cream/50 rounded-lg transition-all"
+                              title="Asignar Administrador"
+                            >
+                              <UserCheck className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleToggleBlock(comp.id)}
+                              className={`p-1.5 rounded-lg transition-all ${
+                                comp.status === 'active' ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'
+                              }`}
+                              title={comp.status === 'active' ? 'Bloquear Empresa' : 'Desbloquear Empresa'}
+                            >
+                              {comp.status === 'active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setPurgeTargetCompanyId(comp.id);
+                                setShowPurgeModal(true);
+                              }}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              title="Purgar Datos"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => openCompanyModal(comp)}
+                              className="p-1.5 text-brand-maroon hover:bg-brand-cream/50 rounded-lg transition-all"
+                              title="Editar Empresa"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

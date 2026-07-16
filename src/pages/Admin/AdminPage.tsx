@@ -4,7 +4,8 @@ import { EntryType, Employee, WorkCenter, AuthorizedDevice, TimeEntry, Correctio
 import { 
   Users, Building, Video, Clock, AlertTriangle, 
   Settings, LogOut, Check, X, FileSpreadsheet, 
-  FileText, ShieldAlert, Key, Plus, Trash2, Calendar, Edit
+  FileText, ShieldAlert, Key, Plus, Trash2, Calendar, Edit,
+  Pencil, Ban, Power, FileCheck, UserPlus, Lock, Unlock
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -870,36 +871,42 @@ export const AdminPage: React.FC = () => {
                             {comp.status.toUpperCase()}
                           </span>
                         </td>
-                        <td className="px-4 py-3.5 text-right space-x-2">
-                          <button
-                            onClick={() => openAdminModal(comp.id)}
-                            className="text-brand-maroon hover:text-brand-maroon/80 font-bold hover:underline"
-                          >
-                            Asignar Admin
-                          </button>
-                          <button
-                            onClick={() => handleToggleBlock(comp.id)}
-                            className={`font-bold hover:underline ${
-                              comp.status === 'active' ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'
-                            }`}
-                          >
-                            {comp.status === 'active' ? 'Bloquear' : 'Desbloquear'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setPurgeTargetCompanyId(comp.id);
-                              setShowPurgeModal(true);
-                            }}
-                            className="text-red-600 hover:text-red-700 font-bold hover:underline"
-                          >
-                            Purgar
-                          </button>
-                          <button
-                            onClick={() => openCompanyModal(comp)}
-                            className="text-brand-maroon hover:text-brand-maroon/80 font-bold hover:underline"
-                          >
-                            Editar
-                          </button>
+                        <td className="px-4 py-3.5 text-right">
+                          <div className="flex justify-end gap-1.5">
+                            <button
+                              onClick={() => openAdminModal(comp.id)}
+                              className="p-1.5 text-brand-maroon hover:bg-brand-cream/50 rounded-lg transition-all"
+                              title="Asignar Administrador"
+                            >
+                              <UserPlus className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleToggleBlock(comp.id)}
+                              className={`p-1.5 rounded-lg transition-all ${
+                                comp.status === 'active' ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'
+                              }`}
+                              title={comp.status === 'active' ? 'Bloquear Empresa' : 'Desbloquear Empresa'}
+                            >
+                              {comp.status === 'active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setPurgeTargetCompanyId(comp.id);
+                                setShowPurgeModal(true);
+                              }}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              title="Purgar Datos"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => openCompanyModal(comp)}
+                              className="p-1.5 text-brand-maroon hover:bg-brand-cream/50 rounded-lg transition-all"
+                              title="Editar Empresa"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1042,25 +1049,29 @@ export const AdminPage: React.FC = () => {
                             {emp.status === 'active' ? 'ACTIVO' : 'INACTIVO'}
                           </span>
                         </td>
-                        <td className="px-4 py-3.5 text-right space-x-3">
-                          <button
-                            onClick={() => {
-                              setPinTargetEmpId(emp.id);
-                              setNewPinValue('');
-                              setPinError('');
-                              setPinSuccess('');
-                              setShowPinModal(true);
-                            }}
-                            className="text-amber-600 hover:text-amber-700 hover:underline font-bold"
-                          >
-                            Modificar PIN
-                          </button>
-                          <button
-                            onClick={() => openEmpModal(emp)}
-                            className="text-brand-maroon hover:text-brand-maroon/80 hover:underline font-bold"
-                          >
-                            Editar
-                          </button>
+                        <td className="px-4 py-3.5 text-right">
+                          <div className="flex justify-end gap-1.5">
+                            <button
+                              onClick={() => {
+                                setPinTargetEmpId(emp.id);
+                                setNewPinValue('');
+                                setPinError('');
+                                setPinSuccess('');
+                                setShowPinModal(true);
+                              }}
+                              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
+                              title="Modificar PIN"
+                            >
+                              <Key className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => openEmpModal(emp)}
+                              className="p-1.5 text-brand-maroon hover:bg-brand-cream/50 rounded-lg transition-all"
+                              title="Editar Empleado"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1101,12 +1112,13 @@ export const AdminPage: React.FC = () => {
                       <p className="text-[10px] font-mono text-brand-subtext">GPS: {center.latitude}, {center.longitude} (R: {center.latitude}m)</p>
                     )}
                   </div>
-                  <div className="flex justify-end pt-4 border-t border-brand-border/40 mt-4">
+                  <div className="flex justify-end pt-3 border-t border-brand-border/40 mt-4">
                     <button
                       onClick={() => openCenterModal(center)}
-                      className="text-brand-maroon hover:text-brand-maroon/80 font-bold text-xs flex items-center gap-1.5"
+                      className="p-1.5 text-brand-maroon hover:bg-brand-cream/50 rounded-lg transition-all"
+                      title="Editar Centro"
                     >
-                      <Edit className="w-3.5 h-3.5" /> Editar Centro
+                      <Pencil className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -1154,21 +1166,25 @@ export const AdminPage: React.FC = () => {
                           {dev.status.toUpperCase()}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 text-right space-x-3">
-                        <button
-                          onClick={() => openDeviceModal(dev)}
-                          className="text-brand-maroon hover:underline font-bold"
-                        >
-                          Editar
-                        </button>
-                        {dev.status === 'active' && (
+                      <td className="px-4 py-3.5 text-right">
+                        <div className="flex justify-end gap-1.5">
                           <button
-                            onClick={() => deauthorizeDevice(dev.id)}
-                            className="text-red-600 hover:text-red-700 font-bold hover:underline"
+                            onClick={() => openDeviceModal(dev)}
+                            className="p-1.5 text-brand-maroon hover:bg-brand-cream/50 rounded-lg transition-all"
+                            title="Editar Dispositivo"
                           >
-                            Desactivar
+                            <Pencil className="w-4 h-4" />
                           </button>
-                        )}
+                          {dev.status === 'active' && (
+                            <button
+                              onClick={() => deauthorizeDevice(dev.id)}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              title="Desactivar Dispositivo"
+                            >
+                              <Power className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1256,17 +1272,20 @@ export const AdminPage: React.FC = () => {
                           </span>
                         </td>
                         <td className="px-4 py-3.5 text-right">
-                          {entry.status === 'active' && (
-                            <button
-                              onClick={() => {
-                                  setVoidTargetId(entry.id);
-                                  setShowVoidModal(true);
-                              }}
-                              className="text-red-600 hover:text-red-700 font-bold hover:underline"
-                            >
-                              Anular
-                            </button>
-                          )}
+                          <div className="flex justify-end">
+                            {entry.status === 'active' && (
+                              <button
+                                onClick={() => {
+                                    setVoidTargetId(entry.id);
+                                    setShowVoidModal(true);
+                                }}
+                                className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                title="Anular Fichaje"
+                              >
+                                <Ban className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1330,15 +1349,17 @@ export const AdminPage: React.FC = () => {
                           <div className="flex md:flex-col gap-2 shrink-0">
                             <button
                               onClick={() => openResolveModal(req.id, 'approved')}
-                              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg active:scale-95 transition-all shadow-md flex items-center gap-1.5"
+                              className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl active:scale-95 transition-all shadow-md flex items-center justify-center"
+                              title="Aprobar Solicitud"
                             >
-                              <Check className="w-3.5 h-3.5" /> Aprobar
+                              <Check className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => openResolveModal(req.id, 'rejected')}
-                              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg active:scale-95 transition-all shadow-md flex items-center gap-1.5"
+                              className="p-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl active:scale-95 transition-all shadow-md flex items-center justify-center"
+                              title="Rechazar Solicitud"
                             >
-                              <X className="w-3.5 h-3.5" /> Rechazar
+                              <X className="w-4 h-4" />
                             </button>
                           </div>
                         )}
@@ -1393,20 +1414,23 @@ export const AdminPage: React.FC = () => {
                             {inc.description}
                           </td>
                           <td className="px-4 py-3.5 text-right">
-                            {!isResolved ? (
-                              <button
-                                onClick={() => {
-                                  setResolveIncidentId(inc.id);
-                                  setIncidentJustification('');
-                                  setShowResolveIncidentModal(true);
-                                }}
-                                className="text-brand-maroon hover:underline font-bold text-xs"
-                              >
-                                Justificar
-                              </button>
-                            ) : (
-                              <span className="text-emerald-600 font-bold text-xs">✓ Resuelto</span>
-                            )}
+                            <div className="flex justify-end">
+                              {!isResolved ? (
+                                <button
+                                  onClick={() => {
+                                    setResolveIncidentId(inc.id);
+                                    setIncidentJustification('');
+                                    setShowResolveIncidentModal(true);
+                                  }}
+                                  className="p-1.5 text-brand-maroon hover:bg-brand-cream/50 rounded-lg transition-all"
+                                  title="Justificar Incidencia"
+                                >
+                                  <FileCheck className="w-4 h-4" />
+                                </button>
+                              ) : (
+                                <span className="text-emerald-600 font-bold text-xs flex items-center gap-1 justify-end"><Check className="w-3.5 h-3.5" /> Resuelto</span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
