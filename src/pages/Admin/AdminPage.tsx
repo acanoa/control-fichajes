@@ -5,7 +5,8 @@ import {
   Users, Building, Video, Clock, AlertTriangle, 
   Settings, LogOut, Check, X, FileSpreadsheet, 
   FileText, ShieldAlert, Key, Plus, Trash2, Calendar, Edit,
-  Pencil, Ban, Power, FileCheck, UserPlus, Lock, Unlock
+  Pencil, Ban, Power, FileCheck, UserPlus, Lock, Unlock,
+  Compass, MapPin, Map
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -44,6 +45,23 @@ export const AdminPage: React.FC = () => {
   React.useEffect(() => {
     refreshData();
   }, [activeTab]);
+
+  // Load Leaflet CSS and JS dynamically
+  React.useEffect(() => {
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    if (!document.getElementById('leaflet-js')) {
+      const script = document.createElement('script');
+      script.id = 'leaflet-js';
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      document.head.appendChild(script);
+    }
+  }, []);
 
   // Add/Edit Company Form State (Superadmin)
   const [showCompanyModal, setShowCompanyModal] = useState(false);
@@ -108,6 +126,12 @@ export const AdminPage: React.FC = () => {
   const [deviceCenterId, setDeviceCenterId] = useState('');
   const [deviceStatus, setDeviceStatus] = useState<AuthorizedDevice['status']>('active');
   const [deviceCameraStatus, setDeviceCameraStatus] = useState<AuthorizedDevice['camera_validation_status']>('validated');
+  const [deviceLat, setDeviceLat] = useState('');
+  const [deviceLng, setDeviceLng] = useState('');
+  const [showMapPickerModal, setShowMapPickerModal] = useState(false);
+  const [mapPickerLat, setMapPickerLat] = useState<number>(40.416775);
+  const [mapPickerLng, setMapPickerLng] = useState<number>(-3.703790);
+  const [mapSearchText, setMapSearchText] = useState('');
 
   // Resolve Incident State
   const [showResolveIncidentModal, setShowResolveIncidentModal] = useState(false);
@@ -498,6 +522,21 @@ export const AdminPage: React.FC = () => {
         status: deviceStatus,
         camera_validation_status: deviceCameraStatus
       });
+
+      // Update work center coordinates if they changed
+      const center = workCenters.find(c => c.id === deviceCenterId);
+      if (center) {
+        const newLat = deviceLat ? Number(deviceLat) : undefined;
+        const newLng = deviceLng ? Number(deviceLng) : undefined;
+        if (center.latitude !== newLat || center.longitude !== newLng) {
+          updateWorkCenter({
+            ...center,
+            latitude: newLat,
+            longitude: newLng
+          });
+        }
+      }
+
       showAlert('Dispositivo modificado correctamente.', 'success');
     }
     setShowDeviceModal(false);
@@ -510,8 +549,101 @@ export const AdminPage: React.FC = () => {
     setDeviceCenterId(dev.work_center_id);
     setDeviceStatus(dev.status);
     setDeviceCameraStatus(dev.camera_validation_status);
+
+    // Find the center coordinates and set them
+    const center = workCenters.find(c => c.id === dev.work_center_id);
+    setDeviceLat(center?.latitude ? String(center.latitude) : '');
+    setDeviceLng(center?.longitude ? String(center.longitude) : '');
+
     setShowDeviceModal(true);
   };
+
+  // Helper to parse coordinates from text/Google Maps URLs
+  const parseCoordinates = (text: string) => {
+    const geoRegex = /@?(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/;
+    const match = text.match(geoRegex);
+    if (match) {
+      return { lat: match[1], lng: match[2] };
+    }
+    return null;
+  };
+
+  // Map Picker Helper
+  const handleOpenMapPicker = () => {
+    let initialLat = 40.416775;
+    let initialLng = -3.703790;
+
+    if (deviceLat && !isNaN(Number(deviceLat))) {
+      initialLat = Number(deviceLat);
+    }
+    if (deviceLng && !isNaN(Number(deviceLng))) {
+      initialLng = Number(deviceLng);
+    }
+
+    setMapPickerLat(initialLat);
+    setMapPickerLng(initialLng);
+    setMapSearchText('');
+    setShowMapPickerModal(true);
+  };
+
+  // Leaflet Map Picker Initializer
+  const mapRef = React.useRef<any>(null);
+  const markerRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    if (!showMapPickerModal) {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+        markerRef.current = null;
+      }
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const mapEl = document.getElementById('leaflet-map-picker');
+      if (!mapEl || !(window as any).L) return;
+
+      const L = (window as any).L;
+
+      const map = L.map('leaflet-map-picker').setView([mapPickerLat, mapPickerLng], 15);
+      mapRef.current = map;
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+
+      // Solve Leaflet image paths in production by using direct unpkg URLs
+      const defaultIcon = L.icon({
+        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        shadowSize: [41, 41]
+      });
+
+      const marker = L.marker([mapPickerLat, mapPickerLng], { 
+        draggable: true,
+        icon: defaultIcon
+      }).addTo(map);
+      markerRef.current = marker;
+
+      marker.on('dragend', () => {
+        const pos = marker.getLatLng();
+        setMapPickerLat(pos.lat);
+        setMapPickerLng(pos.lng);
+      });
+
+      map.on('click', (e: any) => {
+        marker.setLatLng(e.latlng);
+        setMapPickerLat(e.latlng.lat);
+        setMapPickerLng(e.latlng.lng);
+      });
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [showMapPickerModal]);
 
   // Handle PIN Change
   const handlePinSubmit = async (e: React.FormEvent) => {
@@ -2271,7 +2403,15 @@ export const AdminPage: React.FC = () => {
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-subtext mb-1">Centro Asignado</label>
                 <select
                   value={deviceCenterId}
-                  onChange={(e) => setDeviceCenterId(e.target.value)}
+                  onChange={(e) => {
+                    const centerId = e.target.value;
+                    setDeviceCenterId(centerId);
+                    const center = companyCenters.find(c => c.id === centerId);
+                    if (center) {
+                      setDeviceLat(center.latitude ? String(center.latitude) : '');
+                      setDeviceLng(center.longitude ? String(center.longitude) : '');
+                    }
+                  }}
                   className="w-full px-3 py-2 rounded-lg border border-brand-border bg-white text-xs"
                   required
                 >
@@ -2279,6 +2419,79 @@ export const AdminPage: React.FC = () => {
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
+              </div>
+
+              {/* Geolocation Section */}
+              <div className="bg-brand-cream/30 p-3.5 rounded-xl border border-brand-border/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-brand-subtext flex items-center gap-1.5">
+                    <Compass className="w-3.5 h-3.5 text-brand-maroon" /> Geolocalización (Centro)
+                  </span>
+                  {deviceLat && deviceLng && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${deviceLat},${deviceLng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-bold text-brand-maroon hover:underline flex items-center gap-0.5"
+                    >
+                      <MapPin className="w-3 h-3" /> Google Maps ↗
+                    </a>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[9px] font-bold text-brand-subtext mb-0.5">Latitud</label>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={deviceLat}
+                      onChange={(e) => setDeviceLat(e.target.value)}
+                      className="w-full px-2 py-1.5 rounded-lg border border-brand-border text-xs bg-white"
+                      placeholder="ej: 40.416775"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-brand-subtext mb-0.5">Longitud</label>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={deviceLng}
+                      onChange={(e) => setDeviceLng(e.target.value)}
+                      className="w-full px-2 py-1.5 rounded-lg border border-brand-border text-xs bg-white"
+                      placeholder="ej: -3.703790"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleOpenMapPicker}
+                    className="flex-1 py-1.5 bg-brand-maroon/10 hover:bg-brand-maroon/20 text-brand-maroon text-[10px] font-bold rounded-lg transition-all flex items-center justify-center gap-1"
+                  >
+                    <Map className="w-3.5 h-3.5" /> Posicionar en Mapa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = prompt("Pega las coordenadas (ej: 40.41,-3.7) o el enlace de Google Maps aquí:");
+                      if (url) {
+                        const parsed = parseCoordinates(url);
+                        if (parsed) {
+                          setDeviceLat(parsed.lat);
+                          setDeviceLng(parsed.lng);
+                          showAlert("Coordenadas importadas correctamente.", "success");
+                        } else {
+                          showAlert("No se pudieron extraer las coordenadas del texto.", "error");
+                        }
+                      }
+                    }}
+                    className="py-1.5 px-3 bg-brand-cream border border-brand-border hover:bg-brand-cream/70 text-brand-subtext text-[10px] font-bold rounded-lg transition-all"
+                  >
+                    Pegar Enlace
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -2650,6 +2863,106 @@ export const AdminPage: React.FC = () => {
                   className="px-4 py-2 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-lg active:scale-95 transition-all"
                 >
                   Sí, Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INTERACTIVE MAP PICKER MODAL */}
+      {showMapPickerModal && (
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-brand-border rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-scale-up">
+            <div className="bg-brand-maroon px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Compass className="w-5 h-5 text-white animate-spin-slow" />
+                <h3 className="text-white font-black text-base uppercase tracking-wider font-sans">Posicionar en el Mapa</h3>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowMapPickerModal(false)}
+                className="p-1 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              {/* Search bar */}
+              <form 
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!mapSearchText.trim()) return;
+                  try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(mapSearchText)}`);
+                    const data = await res.json();
+                    if (data && data.length > 0) {
+                      const first = data[0];
+                      const lat = parseFloat(first.lat);
+                      const lng = parseFloat(first.lon);
+                      setMapPickerLat(lat);
+                      setMapPickerLng(lng);
+                      if (mapRef.current) {
+                        mapRef.current.setView([lat, lng], 15);
+                      }
+                      if (markerRef.current) {
+                        markerRef.current.setLatLng([lat, lng]);
+                      }
+                    } else {
+                      showAlert('No se encontraron resultados para la dirección buscada.', 'error');
+                    }
+                  } catch (err) {
+                    console.error("Geocoding error:", err);
+                    showAlert('Error al buscar la dirección.', 'error');
+                  }
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  type="text"
+                  value={mapSearchText}
+                  onChange={(e) => setMapSearchText(e.target.value)}
+                  placeholder="Buscar dirección (ej: Lorca, Madrid, Calle Mayor...)"
+                  className="flex-1 px-3 py-2 border border-brand-border rounded-xl text-xs bg-brand-cream/10"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-brand-maroon text-white font-extrabold rounded-xl text-xs hover:bg-brand-maroon/90 active:scale-95 transition-all shadow-sm"
+                >
+                  Buscar
+                </button>
+              </form>
+
+              {/* Leaflet container */}
+              <div id="leaflet-map-picker" className="w-full h-72 rounded-2xl border border-brand-border overflow-hidden shadow-inner bg-brand-cream/10 z-10"></div>
+              
+              <div className="flex items-center justify-between text-xs text-brand-subtext bg-brand-cream/20 px-3 py-2 rounded-xl border border-brand-border/40">
+                <span>📍 Ubicación seleccionada:</span>
+                <span className="font-mono font-bold text-brand-maroon">
+                  {mapPickerLat.toFixed(6)}, {mapPickerLng.toFixed(6)}
+                </span>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowMapPickerModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-brand-subtext border border-brand-border rounded-lg hover:bg-brand-cream/30"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeviceLat(String(mapPickerLat));
+                    setDeviceLng(String(mapPickerLng));
+                    setShowMapPickerModal(false);
+                    showAlert("Ubicación del mapa aplicada.", "success");
+                  }}
+                  className="px-4 py-2 text-xs font-bold bg-brand-maroon text-white rounded-lg hover:bg-brand-maroon/90 active:scale-95 transition-all"
+                >
+                  Confirmar Ubicación
                 </button>
               </div>
             </div>
