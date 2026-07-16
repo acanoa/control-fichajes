@@ -172,8 +172,8 @@ export const PortalPage: React.FC = () => {
   const filteredCenters = workCenters.filter(c => c.company_id === regCompany && c.status === 'active');
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md bg-brand-card rounded-2xl shadow-xl border border-brand-border overflow-hidden">
+    <div className="flex-1 flex flex-col items-center justify-center sm:p-4 bg-brand-cream/10 min-h-screen w-full">
+      <div className="w-full min-h-screen sm:min-h-0 sm:h-auto sm:max-w-md bg-brand-card sm:rounded-2xl sm:shadow-xl sm:border sm:border-brand-border flex flex-col overflow-hidden">
         {/* Maroon Header */}
         <div className="bg-brand-maroon p-6 text-white text-center">
           <h1 className="text-2xl font-bold tracking-wide">CONTROL FICHAJES</h1>
@@ -234,10 +234,10 @@ export const PortalPage: React.FC = () => {
           )}
         </div>
 
-        <div className="p-6">
+        <div className="p-5 sm:p-6 flex-1 flex flex-col justify-between">
           {/* 1. EMPLOYEE LOGIN */}
           {activeTab === 'employee' && (
-            <div>
+            <div className="flex-1 flex flex-col justify-between">
               {!isDeviceAuthorized ? (
                 <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 text-sm flex gap-3 mb-6">
                   <AlertTriangle className="w-5 h-5 shrink-0 text-amber-700 mt-0.5" />
@@ -249,89 +249,91 @@ export const PortalPage: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <form onSubmit={handleEmployeeSubmit} className="space-y-6">
-                  {empError && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-xl text-sm font-semibold">
-                      {empError}
-                    </div>
-                  )}
+                <form onSubmit={handleEmployeeSubmit} className="space-y-4 sm:space-y-6 flex-1 flex flex-col justify-between">
+                  <div className="space-y-4 sm:space-y-6 flex-1 flex flex-col justify-center">
+                    {empError && (
+                      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-xl text-sm font-semibold">
+                        {empError}
+                      </div>
+                    )}
 
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-brand-subtext mb-2">Código Personal (4 dígitos)</label>
-                    <input
-                      type="text"
-                      placeholder="Ej. 0001"
-                      value={empCode}
-                      onChange={(e) => {
-                        setEmpError('');
-                        setEmpCode(e.target.value.replace(/\D/g, '').slice(0, 4));
-                      }}
-                      className="w-full text-center tracking-wider text-lg font-mono px-4 py-3 rounded-xl border border-brand-border bg-brand-cream/20 focus:outline-none focus:ring-2 focus:ring-brand-maroon focus:border-transparent transition-all uppercase"
-                      disabled={empLoading}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-brand-subtext mb-2">PIN de 4 Dígitos</label>
-                    <div className="flex justify-center gap-2 mb-4">
-                      {[0, 1, 2, 3].map((idx) => (
-                        <div
-                          key={idx}
-                          className={`w-10 h-10 rounded-full border-2 flex items-center justify-center text-lg font-extrabold transition-all ${
-                            pin.length > idx 
-                              ? 'border-brand-maroon bg-brand-maroon text-white scale-110 shadow-sm' 
-                              : 'border-brand-border bg-white text-transparent'
-                          }`}
-                        >
-                          *
-                        </div>
-                      ))}
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-brand-subtext mb-2">Código Personal (4 dígitos)</label>
+                      <input
+                        type="text"
+                        placeholder="Ej. 0001"
+                        value={empCode}
+                        onChange={(e) => {
+                          setEmpError('');
+                          setEmpCode(e.target.value.replace(/\D/g, '').slice(0, 4));
+                        }}
+                        className="w-full text-center tracking-wider text-lg font-mono px-4 py-3 rounded-xl border border-brand-border bg-brand-cream/20 focus:outline-none focus:ring-2 focus:ring-brand-maroon focus:border-transparent transition-all uppercase"
+                        disabled={empLoading}
+                      />
                     </div>
 
-                    {/* Numeric Keypad */}
-                    <div className="grid grid-cols-3 gap-2.5 max-w-[280px] mx-auto">
-                      {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(val => (
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-brand-subtext mb-2">PIN de 4 Dígitos</label>
+                      <div className="flex justify-center gap-2 mb-4">
+                        {[0, 1, 2, 3].map((idx) => (
+                          <div
+                            key={idx}
+                            className={`w-10 h-10 rounded-full border-2 flex items-center justify-center text-lg font-extrabold transition-all ${
+                              pin.length > idx 
+                                ? 'border-brand-maroon bg-brand-maroon text-white scale-110 shadow-sm' 
+                                : 'border-brand-border bg-white text-transparent'
+                            }`}
+                          >
+                            *
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Numeric Keypad */}
+                      <div className="grid grid-cols-3 gap-2.5 max-w-[280px] mx-auto">
+                        {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(val => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => handleKeypadPress(val)}
+                            className="py-3 rounded-xl bg-brand-cream/30 border border-brand-border text-brand-text font-bold text-lg hover:bg-brand-maroon hover:text-white active:scale-95 transition-all focus:outline-none shadow-sm"
+                            disabled={empLoading}
+                          >
+                            {val}
+                          </button>
+                        ))}
                         <button
-                          key={val}
                           type="button"
-                          onClick={() => handleKeypadPress(val)}
+                          onClick={() => handleKeypadPress('clear')}
+                          className="py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 font-bold hover:bg-red-100 hover:text-red-800 active:scale-95 transition-all text-xs focus:outline-none uppercase shadow-sm"
+                          disabled={empLoading}
+                        >
+                          Limpiar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleKeypadPress('0')}
                           className="py-3 rounded-xl bg-brand-cream/30 border border-brand-border text-brand-text font-bold text-lg hover:bg-brand-maroon hover:text-white active:scale-95 transition-all focus:outline-none shadow-sm"
                           disabled={empLoading}
                         >
-                          {val}
+                          0
                         </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => handleKeypadPress('clear')}
-                        className="py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 font-bold hover:bg-red-100 hover:text-red-800 active:scale-95 transition-all text-xs focus:outline-none uppercase shadow-sm"
-                        disabled={empLoading}
-                      >
-                        Limpiar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleKeypadPress('0')}
-                        className="py-3 rounded-xl bg-brand-cream/30 border border-brand-border text-brand-text font-bold text-lg hover:bg-brand-maroon hover:text-white active:scale-95 transition-all focus:outline-none shadow-sm"
-                        disabled={empLoading}
-                      >
-                        0
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleKeypadPress('back')}
-                        className="py-3 rounded-xl bg-brand-cream/50 border border-brand-border text-brand-subtext font-bold hover:bg-brand-maroon hover:text-white active:scale-95 transition-all text-xs focus:outline-none uppercase shadow-sm"
-                        disabled={empLoading}
-                      >
-                        Borrar
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => handleKeypadPress('back')}
+                          className="py-3 rounded-xl bg-brand-cream/50 border border-brand-border text-brand-subtext font-bold hover:bg-brand-maroon hover:text-white active:scale-95 transition-all text-xs focus:outline-none uppercase shadow-sm"
+                          disabled={empLoading}
+                        >
+                          Borrar
+                        </button>
+                      </div>
                     </div>
                   </div>
 
                   <button
                     type="submit"
                     disabled={empLoading || pin.length < 4 || !empCode}
-                    className="w-full bg-brand-maroon text-white font-bold py-3.5 rounded-xl hover:bg-brand-maroon/90 active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none shadow-md text-sm uppercase tracking-wider"
+                    className="w-full bg-brand-maroon text-white font-bold py-3.5 rounded-xl hover:bg-brand-maroon/90 active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none shadow-md text-sm uppercase tracking-wider mt-4"
                   >
                     {empLoading ? 'Accediendo...' : 'Iniciar Sesión Empleado'}
                   </button>
