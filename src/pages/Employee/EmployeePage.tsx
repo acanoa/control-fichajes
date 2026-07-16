@@ -17,7 +17,9 @@ export const EmployeePage: React.FC = () => {
 
   // Simulation flags for testing incidents
   const [simulateCameraFail, setSimulateCameraFail] = useState(false);
-  const [simulateGpsFail, setSimulateGpsFail] = useState(false);
+
+  // GPS state
+  const [gpsStatus, setGpsStatus] = useState<'idle' | 'acquiring' | 'ok' | 'error'>('idle');
 
   // Punch screen state
   const [punchingType, setPunchingType] = useState<EntryType | null>(null);
@@ -153,16 +155,35 @@ export const EmployeePage: React.FC = () => {
 
   const registerPunchAction = async (type: EntryType, photo: string | null, camErr?: string) => {
     setPunchStep('registering');
-    
-    // Simulate GPS coordinates
-    let lat: number | undefined = 40.416775;
-    let lng: number | undefined = -3.703790;
+
+    // Real GPS acquisition
+    let lat: number | undefined = undefined;
+    let lng: number | undefined = undefined;
     let gpsErr: string | undefined = undefined;
 
-    if (simulateGpsFail) {
-      lat = undefined;
-      lng = undefined;
-      gpsErr = 'Permiso de ubicación denegado';
+    if ('geolocation' in navigator) {
+      setGpsStatus('acquiring');
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+          });
+        });
+        lat = position.coords.latitude;
+        lng = position.coords.longitude;
+        setGpsStatus('ok');
+      } catch (geoErr: any) {
+        setGpsStatus('error');
+        const code = geoErr?.code;
+        if (code === 1) gpsErr = 'Permiso de ubicación denegado por el usuario';
+        else if (code === 2) gpsErr = 'Posición GPS no disponible';
+        else if (code === 3) gpsErr = 'Tiempo de espera GPS agotado';
+        else gpsErr = 'Error al obtener ubicación GPS';
+      }
+    } else {
+      gpsErr = 'Geolocalización no soportada por este dispositivo';
     }
 
     try {
@@ -186,10 +207,12 @@ export const EmployeePage: React.FC = () => {
       setPunchSuccess(typeLabels[type]);
       setPunchStep('idle');
       setPunchingType(null);
+      setTimeout(() => setGpsStatus('idle'), 3000); // hide GPS badge after 3s
     } catch (err: any) {
       setPunchError(err.message || 'Error registrando el fichaje.');
       setPunchStep('idle');
       setPunchingType(null);
+      setTimeout(() => setGpsStatus('idle'), 3000);
     }
   };
 
@@ -324,7 +347,7 @@ export const EmployeePage: React.FC = () => {
               </h2>
             </div>
 
-            {/* Simulation controls for developers to test incidents */}
+            {/* Dev simulation controls — camera only */}
             <div className="p-3 bg-brand-cream/40 border border-brand-border/60 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs font-semibold text-brand-subtext">
               <span>🔧 Simular Entornos de Prueba:</span>
               <div className="flex items-center gap-4">
@@ -337,16 +360,19 @@ export const EmployeePage: React.FC = () => {
                   />
                   Fallo de Cámara
                 </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={simulateGpsFail}
-                    onChange={(e) => setSimulateGpsFail(e.target.checked)}
-                    className="rounded text-brand-maroon focus:ring-brand-maroon"
-                  />
-                  Sin Coordenadas GPS
-                </label>
               </div>
+              {/* GPS status indicator */}
+              {gpsStatus !== 'idle' && (
+                <span className={`flex items-center gap-1.5 px-2 py-1 rounded-lg font-bold text-[10px] uppercase tracking-wider ${
+                  gpsStatus === 'acquiring' ? 'bg-amber-100 text-amber-700' :
+                  gpsStatus === 'ok' ? 'bg-emerald-100 text-emerald-700' :
+                  'bg-red-100 text-red-700'
+                }`}>
+                  <Compass className="w-3 h-3" />
+                  {gpsStatus === 'acquiring' ? 'Obteniendo GPS...' :
+                   gpsStatus === 'ok' ? 'GPS ✓' : 'GPS sin señal'}
+                </span>
+              )}
             </div>
 
             {/* Notification alert */}
