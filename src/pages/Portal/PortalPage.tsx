@@ -11,7 +11,6 @@ export const PortalPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'employee' | 'admin' | 'register'>('employee');
   
   // Employee Login form state
-  const [empCode, setEmpCode] = useState('');
   const [pin, setPin] = useState('');
   const [empError, setEmpError] = useState('');
   const [empLoading, setEmpLoading] = useState(false);
@@ -47,10 +46,6 @@ export const PortalPage: React.FC = () => {
 
   const handleEmployeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!empCode) {
-      setEmpError('Por favor introduzca su código de empleado.');
-      return;
-    }
     if (pin.length < 4) {
       setEmpError('El PIN debe tener 4 dígitos.');
       return;
@@ -59,7 +54,7 @@ export const PortalPage: React.FC = () => {
     setEmpLoading(true);
     setEmpError('');
     try {
-      await loginEmployee(empCode, pin);
+      await loginEmployee(pin);
     } catch (err: any) {
       setEmpError(err.message || 'Error de autenticación.');
       setPin(''); // Reset PIN on error
@@ -258,21 +253,6 @@ export const PortalPage: React.FC = () => {
                     )}
 
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-brand-subtext mb-2">Código Personal (4 dígitos)</label>
-                      <input
-                        type="text"
-                        placeholder="Ej. 0001"
-                        value={empCode}
-                        onChange={(e) => {
-                          setEmpError('');
-                          setEmpCode(e.target.value.replace(/\D/g, '').slice(0, 4));
-                        }}
-                        className="w-full text-center tracking-wider text-lg font-mono px-4 py-3 rounded-xl border border-brand-border bg-brand-cream/20 focus:outline-none focus:ring-2 focus:ring-brand-maroon focus:border-transparent transition-all uppercase"
-                        disabled={empLoading}
-                      />
-                    </div>
-
-                    <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-brand-subtext mb-2">PIN de 4 Dígitos</label>
                       <div className="flex justify-center gap-2 mb-4">
                         {[0, 1, 2, 3].map((idx) => (
@@ -332,7 +312,7 @@ export const PortalPage: React.FC = () => {
 
                   <button
                     type="submit"
-                    disabled={empLoading || pin.length < 4 || !empCode}
+                    disabled={empLoading || pin.length < 4}
                     className="w-full bg-brand-maroon text-white font-bold py-3.5 rounded-xl hover:bg-brand-maroon/90 active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none shadow-md text-sm uppercase tracking-wider mt-4"
                   >
                     {empLoading ? 'Accediendo...' : 'Iniciar Sesión Empleado'}

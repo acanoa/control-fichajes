@@ -45,7 +45,7 @@ interface AppContextType {
   authorizeDevice: (name: string, companyId: string, workCenterId: string, cameraWorking: boolean) => Promise<AuthorizedDevice>;
   deauthorizeDevice: (deviceId: string) => void;
   deleteDevice: (deviceId: string) => Promise<void>;
-  loginEmployee: (code: string, pin: string) => Promise<Employee>;
+  loginEmployee: (pin: string) => Promise<Employee>;
   loginAdmin: (email: string, pass: string) => Promise<Profile>;
   logout: () => void;
   registerPunch: (type: EntryType, photoBase64: string | null, lat?: number, lng?: number, cameraError?: string, gpsError?: string) => Promise<TimeEntry>;
@@ -588,26 +588,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const loginEmployee = async (code: string, pin: string): Promise<Employee> => {
-    // Normalization and prepending the active terminal's company code
-    let cleanCode = code.trim().toUpperCase();
-    if (currentDevice) {
-      const comp = companies.find(c => c.id === currentDevice.company_id);
-      if (comp) {
-        // Strip non-digit characters and pad the remaining number to 4 digits: e.g. "0001" or "1" -> "0001"
-        const cleanNumber = code.replace(/\D/g, '');
-        const paddedNumber = cleanNumber.padStart(4, '0');
-        cleanCode = `${comp.company_code}-${paddedNumber}`;
-      }
+  const loginEmployee = async (pin: string): Promise<Employee> => {
+    if (!currentDevice) {
+      throw new Error('Terminal no autorizado.');
     }
 
-    const emp = employees.find(e => e.employee_code === cleanCode);
+    const deviceCompanyId = currentDevice.company_id;
+    const deviceWorkCenterId = currentDevice.work_center_id;
+
+    // 1. Find all active employees in this company with the matching PIN
+    const matchingEmployees = employees.filter(e => 
+      e.company_id === deviceCompanyId && 
+      e.pin_hash === pin && 
+      e.status === 'active'
+    );
+
+    if (matchingEmployees.length === 0) {
+      throw new Error('No se encuentra en el centro asociado.');
+    }
+
+    // 2. Check which matching employee is assigned to the current work center
+    const emp = matchingEmployees.find(e => 
+      employeeWorkCenters.some(ewc => ewc.employee_id === e.id && ewc.work_center_id === deviceWorkCenterId)
+    );
+
     if (!emp) {
-      throw new Error('Código de empleado o PIN incorrecto.');
-    }
-
-    if (emp.status === 'inactive') {
-      throw new Error('El acceso de este empleado está desactivado.');
+      throw new Error('No se encuentra en el centro asociado.');
     }
 
     // Check Lockout
@@ -616,42 +622,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       throw new Error(`Acceso bloqueado. Inténtelo de nuevo en ${minutesLeft} minutos.`);
     }
 
-    if (emp.pin_hash !== pin) {
-      // Increment failed attempts
-      const newAttempts = emp.failed_pin_attempts + 1;
-      let lockedUntil: string | undefined = undefined;
-      
-      if (newAttempts >= 5) {
-        // Lock for 15 minutes
-        const lockDate = new Date();
-        lockDate.setMinutes(lockDate.getMinutes() + 15);
-        lockedUntil = lockDate.toISOString();
-      }
-
-      setEmployees(prev => prev.map(e => e.id === emp.id ? { 
-        ...e, 
-        failed_pin_attempts: newAttempts >= 5 ? 0 : newAttempts,
-        locked_until: lockedUntil 
-      } : e));
-
-      // Update failed attempts/lockout in Supabase
-      supabase.from('employees').update({
-        failed_pin_attempts: newAttempts >= 5 ? 0 : newAttempts,
-        locked_until: lockedUntil || null,
-        updated_at: new Date().toISOString()
-      }).eq('id', emp.id).then();
-
-      if (newAttempts >= 5) {
-        throw new Error('Demasiados intentos fallidos. Acceso bloqueado durante 15 minutos.');
-      } else {
-        throw new Error(`Código de empleado o PIN incorrecto. Intentos restantes: ${5 - newAttempts}`);
-      }
-    }
-
     // Success! Reset failed attempts
     setEmployees(prev => prev.map(e => e.id === emp.id ? { 
       ...e, 
-      failed_pin_attempts: 0,
+      failed_pin_attempts: 0, 
       locked_until: undefined 
     } : e));
 
@@ -673,15 +647,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     setCurrentCompany(company);
 
-    // If using an authorized device, tie the employee session to that work center
-    if (currentDevice && currentDevice.company_id === company.id) {
-      const wc = workCenters.find(w => w.id === currentDevice.work_center_id);
-      setCurrentWorkCenter(wc);
-    } else {
-      // Default to HQ or first active work center if device not set
-      const firstWc = workCenters.find(w => w.company_id === company.id && w.status === 'active');
-      setCurrentWorkCenter(firstWc);
-    }
+    const wc = workCenters.find(w => w.id === deviceWorkCenterId);
+    setCurrentWorkCenter(wc);
 
     return emp;
   };
