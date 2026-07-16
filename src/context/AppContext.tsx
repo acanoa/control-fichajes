@@ -11,6 +11,7 @@ import {
   mockTimeEntryIncidents, mockCorrectionRequests, mockAuditLogs 
 } from '../mockData';
 import { CheckCircle2, AlertTriangle, Info } from 'lucide-react';
+import { supabase } from '../services/supabase';
 
 interface AppContextType {
   // Master lists
@@ -92,8 +93,150 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAlertState(prev => ({ ...prev, show: false }));
   };
 
+  // Stable UUID helper to convert mock string IDs to valid UUIDs
+  const toUUID = (id: string, prefix = '00000000'): string => {
+    if (!id) return '';
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return id;
+    }
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = (hash << 5) - hash + id.charCodeAt(i);
+      hash |= 0;
+    }
+    const hex = Math.abs(hash).toString(16).padStart(8, '0');
+    return `${prefix}-0000-0000-0000-${hex.padStart(12, '0')}`;
+  };
+
+  // Sync with Supabase on mount (or auto-seed if database is empty)
+  useEffect(() => {
+    const loadFromSupabase = async () => {
+      try {
+        console.log("Loading data from Supabase...");
+        
+        // 1. Fetch companies
+        const { data: dbComps, error: compsErr } = await supabase.from('companies').select('*');
+        if (compsErr) throw compsErr;
+        
+        if (dbComps && dbComps.length === 0) {
+          console.log("Supabase database is empty. Seeding with mock data...");
+          // Seed Companies
+          await supabase.from('companies').upsert(mockCompanies.map(c => ({
+            id: toUUID(c.id, '11111111'),
+            legal_name: c.legal_name,
+            commercial_name: c.commercial_name,
+            tax_id: c.tax_id,
+            company_code: c.company_code,
+            address: c.address,
+            email: c.email,
+            phone: c.phone,
+            status: c.status,
+            session_timeout_minutes: c.session_timeout_minutes
+          })));
+
+          // Seed Work Centers
+          await supabase.from('work_centers').upsert(mockWorkCenters.map(wc => ({
+            id: toUUID(wc.id, '22222222'),
+            company_id: toUUID(wc.company_id, '11111111'),
+            name: wc.name,
+            address: wc.address,
+            latitude: wc.latitude,
+            longitude: wc.longitude,
+            status: wc.status
+          })));
+
+          // Seed Profiles
+          await supabase.from('profiles').upsert(mockProfiles.map(p => ({
+            id: toUUID(p.id, '33333333'),
+            auth_user_id: p.auth_user_id,
+            full_name: p.full_name,
+            email: p.email,
+            role: p.role,
+            company_id: p.company_id ? toUUID(p.company_id, '11111111') : undefined,
+            status: p.status
+          })));
+
+          // Seed Employees (force 4 digits)
+          await supabase.from('employees').upsert(mockEmployees.map(emp => ({
+            id: toUUID(emp.id, '44444444'),
+            company_id: toUUID(emp.company_id, '11111111'),
+            dni: emp.dni,
+            full_name: emp.full_name,
+            employee_counter: emp.employee_counter,
+            employee_code: emp.employee_code.replace('ACM-0000', 'ACM-000').replace('BET-0000', 'BET-000'),
+            pin_hash: emp.pin_hash,
+            email: emp.email,
+            phone: emp.phone,
+            job_title: emp.job_title,
+            department: emp.department,
+            hire_date: emp.hire_date,
+            status: emp.status,
+            failed_pin_attempts: emp.failed_pin_attempts
+          })));
+
+          // Seed employee_work_centers mappings
+          const seededEwcs: any[] = [];
+          mockEmployees.forEach(emp => {
+            const empUUID = toUUID(emp.id, '44444444');
+            const compCenters = mockWorkCenters.filter(wc => wc.company_id === emp.company_id);
+            compCenters.forEach(wc => {
+              const wcUUID = toUUID(wc.id, '22222222');
+              seededEwcs.push({
+                employee_id: empUUID,
+                work_center_id: wcUUID
+              });
+            });
+          });
+          if (seededEwcs.length > 0) {
+            await supabase.from('employee_work_centers').upsert(seededEwcs);
+          }
+
+          // Reload from Supabase
+          const { data: reloadedComps } = await supabase.from('companies').select('*');
+          if (reloadedComps) rawSetCompanies(reloadedComps);
+        } else if (dbComps) {
+          rawSetCompanies(dbComps);
+        }
+
+        // 2. Fetch other tables
+        const { data: dbWcs } = await supabase.from('work_centers').select('*');
+        if (dbWcs) setWorkCenters(dbWcs);
+
+        const { data: dbProfs } = await supabase.from('profiles').select('*');
+        if (dbProfs) rawSetProfiles(dbProfs);
+
+        const { data: dbEmps } = await supabase.from('employees').select('*');
+        if (dbEmps) setEmployees(dbEmps);
+
+        const { data: dbDevs } = await supabase.from('authorized_devices').select('*');
+        if (dbDevs) setDevices(dbDevs);
+
+        const { data: dbEntries } = await supabase.from('time_entries').select('*');
+        if (dbEntries) rawSetTimeEntries(dbEntries);
+
+        const { data: dbIncidents } = await supabase.from('time_entry_incidents').select('*');
+        if (dbIncidents) setIncidents(dbIncidents);
+
+        const { data: dbRequests } = await supabase.from('correction_requests').select('*');
+        if (dbRequests) setRequests(dbRequests);
+
+        const { data: dbLogs } = await supabase.from('audit_logs').select('*');
+        if (dbLogs) setAuditLogs(dbLogs);
+
+        const { data: dbEwcs } = await supabase.from('employee_work_centers').select('*');
+        if (dbEwcs) rawSetEmployeeWorkCenters(dbEwcs);
+
+        console.log("Supabase database load completed successfully!");
+      } catch (err) {
+        console.warn("Could not load data from Supabase. Using localStorage fallback:", err);
+      }
+    };
+    loadFromSupabase();
+  }, []);
+
   // Local DB States
-  const [companies, setCompanies] = useState<Company[]>(() => {
+  // Local DB States
+  const [companies, rawSetCompanies] = useState<Company[]>(() => {
     const saved = localStorage.getItem('cf_companies');
     return saved ? JSON.parse(saved) : mockCompanies;
   });
@@ -101,7 +244,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem('cf_work_centers');
     return saved ? JSON.parse(saved) : mockWorkCenters;
   });
-  const [profiles, setProfiles] = useState<Profile[]>(() => {
+  const [profiles, rawSetProfiles] = useState<Profile[]>(() => {
     const saved = localStorage.getItem('cf_profiles');
     const list = saved ? JSON.parse(saved) : mockProfiles;
     if (!list.some((p: any) => p.email === 'acano2@hotmail.com')) {
@@ -126,7 +269,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem('cf_devices');
     return saved ? JSON.parse(saved) : mockAuthorizedDevices;
   });
-  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>(() => {
+  const [timeEntries, rawSetTimeEntries] = useState<TimeEntry[]>(() => {
     const saved = localStorage.getItem('cf_time_entries');
     return saved ? JSON.parse(saved) : mockTimeEntries;
   });
@@ -142,7 +285,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem('cf_audit_logs');
     return saved ? JSON.parse(saved) : mockAuditLogs;
   });
-  const [employeeWorkCenters, setEmployeeWorkCenters] = useState<EmployeeWorkCenter[]>(() => {
+  const [employeeWorkCenters, rawSetEmployeeWorkCenters] = useState<EmployeeWorkCenter[]>(() => {
     const saved = localStorage.getItem('cf_employee_work_centers');
     if (saved) return JSON.parse(saved);
     const list: EmployeeWorkCenter[] = [];
@@ -159,6 +302,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     return list;
   });
+
+  // Custom Wrapped Setters for Supabase Sync & stable UUID conversions
+  const setCompanies: React.Dispatch<React.SetStateAction<Company[]>> = (value) => {
+    rawSetCompanies(prev => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      const mapped = next.map(c => ({
+        ...c,
+        id: toUUID(c.id, '11111111')
+      }));
+      supabase.from('companies').upsert(mapped).then(({ error }) => {
+        if (error) console.error("Error upserting companies to Supabase:", error);
+      });
+      return mapped;
+    });
+  };
+
+  const setProfiles: React.Dispatch<React.SetStateAction<Profile[]>> = (value) => {
+    rawSetProfiles(prev => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      const mapped = next.map(p => ({
+        ...p,
+        id: toUUID(p.id, '33333333'),
+        auth_user_id: toUUID(p.auth_user_id, 'ffffffff'),
+        company_id: p.company_id ? toUUID(p.company_id, '11111111') : undefined
+      }));
+      supabase.from('profiles').upsert(mapped).then(({ error }) => {
+        if (error) console.error("Error upserting profiles to Supabase:", error);
+      });
+      return mapped;
+    });
+  };
+
+  const setTimeEntries: React.Dispatch<React.SetStateAction<TimeEntry[]>> = (value) => {
+    rawSetTimeEntries(prev => {
+      const next = typeof value === 'function' ? (value as Function)(prev) : value;
+      const mapped = next.map((t: TimeEntry) => ({
+        ...t,
+        id: toUUID(t.id, '77777777'),
+        company_id: toUUID(t.company_id, '11111111'),
+        work_center_id: toUUID(t.work_center_id, '22222222'),
+        employee_id: toUUID(t.employee_id, '44444444'),
+        device_id: t.device_id ? toUUID(t.device_id, '66666666') : undefined
+      }));
+      supabase.from('time_entries').upsert(mapped).then(({ error }) => {
+        if (error) console.error("Error upserting time entries to Supabase:", error);
+      });
+      return mapped;
+    });
+  };
+
+  const setEmployeeWorkCenters: React.Dispatch<React.SetStateAction<EmployeeWorkCenter[]>> = (value) => {
+    rawSetEmployeeWorkCenters(prev => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      const mapped = next.map(ewc => ({
+        ...ewc,
+        id: toUUID(ewc.id, '55555555'),
+        employee_id: toUUID(ewc.employee_id, '44444444'),
+        work_center_id: toUUID(ewc.work_center_id, '22222222')
+      }));
+      supabase.from('employee_work_centers').upsert(mapped).then(({ error }) => {
+        if (error) console.error("Error upserting employee work centers to Supabase:", error);
+      });
+      return mapped;
+    });
+  };
 
   // Session States
   const [currentUser, setCurrentUser] = useState<AppContextType['currentUser']>(() => {
@@ -253,9 +461,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Actions
   const authorizeDevice = async (name: string, companyId: string, workCenterId: string, cameraWorking: boolean): Promise<AuthorizedDevice> => {
-    const token = 'token-' + Math.random().toString(36).substr(2, 9);
+    const token = crypto.randomUUID();
     const newDevice: AuthorizedDevice = {
-      id: 'dev-' + Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       company_id: companyId,
       work_center_id: workCenterId,
       name,
@@ -271,6 +479,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setDevices(prev => [...prev, newDevice]);
     
+    // Insert into Supabase
+    supabase.from('authorized_devices').insert(newDevice).then(({ error }) => {
+      if (error) console.error("Error inserting device into Supabase:", error);
+    });
+    
     // Auto authorize on local device
     if (cameraWorking) {
       localStorage.setItem('cf_device_token', token);
@@ -281,6 +494,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deauthorizeDevice = (deviceId: string) => {
     setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'inactive' as const } : d));
+    
+    // Update status in Supabase
+    supabase.from('authorized_devices').update({ status: 'inactive' }).eq('id', deviceId).then(({ error }) => {
+      if (error) console.error("Error deauthorizing device in Supabase:", error);
+    });
+
     if (currentDevice?.id === deviceId) {
       localStorage.removeItem('cf_device_token');
       setCurrentDevice(undefined);
@@ -333,6 +552,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         locked_until: lockedUntil 
       } : e));
 
+      // Update failed attempts/lockout in Supabase
+      supabase.from('employees').update({
+        failed_pin_attempts: newAttempts >= 5 ? 0 : newAttempts,
+        locked_until: lockedUntil || null,
+        updated_at: new Date().toISOString()
+      }).eq('id', emp.id).then();
+
       if (newAttempts >= 5) {
         throw new Error('Demasiados intentos fallidos. Acceso bloqueado durante 15 minutos.');
       } else {
@@ -346,6 +572,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       failed_pin_attempts: 0,
       locked_until: undefined 
     } : e));
+
+    // Reset failed attempts/lockout in Supabase
+    supabase.from('employees').update({
+      failed_pin_attempts: 0,
+      locked_until: null,
+      updated_at: new Date().toISOString()
+    }).eq('id', emp.id).then();
 
     const company = companies.find(c => c.id === emp.company_id);
     if (!company || company.status === 'blocked') {
@@ -372,7 +605,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const loginAdmin = async (email: string, pass: string): Promise<Profile> => {
-    // Normal mock authentication
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: pass
+      });
+
+      if (!authError && authData.user) {
+        // Query the profiles table in Supabase
+        const { data: dbProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('auth_user_id', authData.user.id)
+          .single();
+
+        if (dbProfile) {
+          if (dbProfile.status === 'blocked') {
+            await supabase.auth.signOut();
+            throw new Error('Su cuenta administrativa está bloqueada.');
+          }
+          setCurrentUser({
+            role: dbProfile.role,
+            profile: dbProfile
+          });
+          if (dbProfile.company_id) {
+            const company = companies.find(c => c.id === dbProfile.company_id);
+            setCurrentCompany(company);
+          }
+          return dbProfile;
+        }
+      }
+    } catch (e: any) {
+      if (e.message && e.message.includes('bloqueada')) throw e;
+      console.warn("Supabase Auth login failed, falling back to local credentials:", e);
+    }
+
+    // Normal mock authentication fallback
     const prof = profiles.find(p => p.email.toLowerCase() === email.trim().toLowerCase());
     if (!prof) {
       throw new Error('Credenciales de administrador incorrectas.');
@@ -382,7 +650,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       throw new Error('Su cuenta administrativa está bloqueada.');
     }
 
-    // Pass verification (any password is fine for mock, let's enforce 'admin' or just pass)
     if (pass.length < 4) {
       throw new Error('La contraseña debe tener al menos 4 caracteres.');
     }
@@ -466,7 +733,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const has_incident = photo_status !== 'success' || gps_status !== 'success';
 
     const newEntry: TimeEntry = {
-      id: 'entry-' + Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       company_id: currentCompany.id,
       work_center_id: currentWorkCenter.id,
       employee_id: emp.id,
@@ -488,10 +755,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setTimeEntries(prev => [...prev, newEntry]);
 
+    // Insert time entry to Supabase
+    supabase.from('time_entries').insert(newEntry).then(({ error }) => {
+      if (error) console.error("Error inserting time entry into Supabase:", error);
+    });
+
     // Handle Incidents logging
     if (has_incident) {
       const newInc: TimeEntryIncident = {
-        id: 'inc-' + Math.random().toString(36).substr(2, 9),
+        id: crypto.randomUUID(),
         company_id: currentCompany.id,
         work_center_id: currentWorkCenter.id,
         employee_id: emp.id,
@@ -504,6 +776,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         created_at: new Date().toISOString()
       };
       setIncidents(prev => [...prev, newInc]);
+
+      // Insert incident to Supabase
+      supabase.from('time_entry_incidents').insert(newInc).then(({ error }) => {
+        if (error) console.error("Error inserting time entry incident into Supabase:", error);
+      });
     }
 
     // Auto logout immediately after punch
@@ -528,9 +805,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const counterStr = String(newCounter).padStart(4, '0');
     const empCode = `${company.company_code}-${counterStr}`;
 
+    const newEmpId = crypto.randomUUID();
     const newEmp: Employee = {
       ...emp,
-      id: 'emp-' + Math.random().toString(36).substr(2, 9),
+      id: newEmpId,
       employee_counter: newCounter,
       employee_code: empCode,
       failed_pin_attempts: 0,
@@ -540,18 +818,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setEmployees(prev => [...prev, newEmp]);
 
+    // Insert Employee to Supabase
+    supabase.from('employees').insert(newEmp).then(({ error }) => {
+      if (error) console.error("Error inserting employee into Supabase:", error);
+    });
+
     if (allowedCenters && allowedCenters.length) {
       const mappings: EmployeeWorkCenter[] = allowedCenters.map(cid => ({
-        id: `ewc-${newEmp.id}-${cid}`,
+        id: crypto.randomUUID(),
         employee_id: newEmp.id,
         work_center_id: cid,
         created_at: new Date().toISOString()
       }));
       setEmployeeWorkCenters(prev => [...prev, ...mappings]);
+
+      // Insert mappings into Supabase
+      supabase.from('employee_work_centers').insert(mappings).then(({ error }) => {
+        if (error) console.error("Error inserting employee work center mappings:", error);
+      });
     }
 
     const log: AuditLog = {
-      id: 'audit-' + Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       company_id: emp.company_id,
       entity_type: 'employees',
       entity_id: newEmp.id,
@@ -562,26 +850,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       performed_at: new Date().toISOString()
     };
     setAuditLogs(prev => [...prev, log]);
+    supabase.from('audit_logs').insert(log).then();
   };
 
   const updateEmployee = (emp: Employee, allowedCenters?: string[]) => {
-    setEmployees(prev => prev.map(e => e.id === emp.id ? { ...emp, updated_at: new Date().toISOString() } : e));
+    const updatedEmp = { ...emp, updated_at: new Date().toISOString() };
+    setEmployees(prev => prev.map(e => e.id === emp.id ? updatedEmp : e));
+
+    // Update in Supabase
+    supabase.from('employees').update(updatedEmp).eq('id', emp.id).then(({ error }) => {
+      if (error) console.error("Error updating employee in Supabase:", error);
+    });
 
     if (allowedCenters) {
+      const mappings = allowedCenters.map(cid => ({
+        id: crypto.randomUUID(),
+        employee_id: emp.id,
+        work_center_id: cid,
+        created_at: new Date().toISOString()
+      }));
+
       setEmployeeWorkCenters(prev => {
         const clean = prev.filter(ewc => ewc.employee_id !== emp.id);
-        const mappings = allowedCenters.map(cid => ({
-          id: `ewc-${emp.id}-${cid}`,
-          employee_id: emp.id,
-          work_center_id: cid,
-          created_at: new Date().toISOString()
-        }));
         return [...clean, ...mappings];
+      });
+
+      // Update mappings in Supabase: delete old ones and insert new ones
+      supabase.from('employee_work_centers').delete().eq('employee_id', emp.id).then(() => {
+        if (mappings.length > 0) {
+          supabase.from('employee_work_centers').insert(mappings).then(({ error }) => {
+            if (error) console.error("Error inserting updated employee work centers:", error);
+          });
+        }
       });
     }
 
     const log: AuditLog = {
-      id: 'audit-' + Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       company_id: emp.company_id,
       entity_type: 'employees',
       entity_id: emp.id,
@@ -592,6 +897,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       performed_at: new Date().toISOString()
     };
     setAuditLogs(prev => [...prev, log]);
+    supabase.from('audit_logs').insert(log).then();
   };
 
   const changeEmployeePin = async (empId: string, newPin: string): Promise<void> => {
@@ -602,10 +908,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setEmployees(prev => prev.map(e => e.id === empId ? { ...e, pin_hash: newPin, updated_at: new Date().toISOString() } : e));
 
+    supabase.from('employees').update({
+      pin_hash: newPin,
+      updated_at: new Date().toISOString()
+    }).eq('id', empId).then(({ error }) => {
+      if (error) console.error("Error updating PIN in Supabase:", error);
+    });
+
     const emp = employees.find(e => e.id === empId);
     if (emp) {
       const log: AuditLog = {
-        id: 'audit-' + Math.random().toString(36).substr(2, 9),
+        id: crypto.randomUUID(),
         company_id: emp.company_id,
         entity_type: 'employees',
         entity_id: empId,
@@ -615,12 +928,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         performed_at: new Date().toISOString()
       };
       setAuditLogs(prev => [...prev, log]);
+      supabase.from('audit_logs').insert(log).then();
     }
   };
 
   const addWorkCenter = (companyId: string, name: string, address: string, lat?: number, lng?: number, radius?: number, status?: 'active' | 'inactive') => {
     const newCenter: WorkCenter = {
-      id: 'wc-' + Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       company_id: companyId,
       name,
       address,
@@ -631,39 +945,68 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updated_at: new Date().toISOString()
     };
     setWorkCenters(prev => [...prev, newCenter]);
+    supabase.from('work_centers').insert(newCenter).then(({ error }) => {
+      if (error) console.error("Error inserting work center into Supabase:", error);
+    });
   };
 
   const updateWorkCenter = (center: WorkCenter) => {
-    setWorkCenters(prev => prev.map(c => c.id === center.id ? { ...center, updated_at: new Date().toISOString() } : c));
+    const updated = { ...center, updated_at: new Date().toISOString() };
+    setWorkCenters(prev => prev.map(c => c.id === center.id ? updated : c));
+    supabase.from('work_centers').update(updated).eq('id', center.id).then(({ error }) => {
+      if (error) console.error("Error updating work center in Supabase:", error);
+    });
   };
 
   const updateDevice = (device: AuthorizedDevice) => {
-    setDevices(prev => prev.map(d => d.id === device.id ? { ...device, updated_at: new Date().toISOString() } : d));
+    const updated = { ...device, updated_at: new Date().toISOString() };
+    setDevices(prev => prev.map(d => d.id === device.id ? updated : d));
     if (currentDevice && currentDevice.id === device.id) {
-      setCurrentDevice({ ...device, updated_at: new Date().toISOString() });
+      setCurrentDevice(updated);
     }
+    supabase.from('authorized_devices').update(updated).eq('id', device.id).then(({ error }) => {
+      if (error) console.error("Error updating device in Supabase:", error);
+    });
   };
 
   const resolveIncident = (incidentId: string, justification: string) => {
     const inc = incidents.find(i => i.id === incidentId);
     if (!inc) return;
 
-    setIncidents(prev => prev.map(i => i.id === incidentId ? {
-      ...i,
-      description: i.description ? `${i.description} | JUSTIFICADO: ${justification}` : `JUSTIFICADO: ${justification}`,
-    } : i));
+    const updatedInc = {
+      ...inc,
+      description: inc.description ? `${inc.description} | JUSTIFICADO: ${justification}` : `JUSTIFICADO: ${justification}`,
+    };
+    setIncidents(prev => prev.map(i => i.id === incidentId ? updatedInc : i));
+
+    // Update incident in Supabase
+    supabase.from('time_entry_incidents').update({
+      description: updatedInc.description
+    }).eq('id', incidentId).then();
 
     if (inc.time_entry_id) {
-      setTimeEntries(prev => prev.map(t => t.id === inc.time_entry_id ? {
-        ...t,
-        has_incident: false,
-        manual_reason: t.manual_reason ? `${t.manual_reason} | Incidencia justificada: ${justification}` : `Incidencia justificada: ${justification}`,
-        updated_at: new Date().toISOString()
-      } : t));
+      setTimeEntries(prev => prev.map(t => {
+        if (t.id === inc.time_entry_id) {
+          const updatedEntry = {
+            ...t,
+            has_incident: false,
+            manual_reason: t.manual_reason ? `${t.manual_reason} | Incidencia justificada: ${justification}` : `Incidencia justificada: ${justification}`,
+            updated_at: new Date().toISOString()
+          };
+          // Update entry in Supabase
+          supabase.from('time_entries').update({
+            has_incident: false,
+            manual_reason: updatedEntry.manual_reason,
+            updated_at: updatedEntry.updated_at
+          }).eq('id', inc.time_entry_id).then();
+          return updatedEntry;
+        }
+        return t;
+      }));
     }
 
     const log: AuditLog = {
-      id: 'audit-' + Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       company_id: inc.company_id,
       entity_type: 'time_entry_incidents',
       entity_id: incidentId,
@@ -673,19 +1016,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       performed_at: new Date().toISOString()
     };
     setAuditLogs(prev => [...prev, log]);
+    supabase.from('audit_logs').insert(log).then();
   };
 
   const resolveRequest = (reqId: string, status: 'approved' | 'rejected', responseText: string) => {
     const req = requests.find(r => r.id === reqId);
     if (!req) return;
 
-    setRequests(prev => prev.map(r => r.id === reqId ? { 
-      ...r, 
+    const updatedReq = { 
+      ...req, 
       status, 
       admin_response: responseText, 
       resolved_by: currentUser.profile?.id,
       resolved_at: new Date().toISOString()
-    } : r));
+    };
+    setRequests(prev => prev.map(r => r.id === reqId ? updatedReq : r));
+
+    // Update request in Supabase
+    supabase.from('correction_requests').update({
+      status: updatedReq.status,
+      admin_response: updatedReq.admin_response,
+      resolved_by: updatedReq.resolved_by,
+      resolved_at: updatedReq.resolved_at
+    }).eq('id', reqId).then();
 
     // Audit logs & creation of missing entry if approved
     if (status === 'approved') {
@@ -693,7 +1046,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       if (req.request_type === 'create_missing') {
         const newEntry: TimeEntry = {
-          id: 'entry-' + Math.random().toString(36).substr(2, 9),
+          id: crypto.randomUUID(),
           company_id: req.company_id,
           work_center_id: workCenters.find(w => w.company_id === req.company_id)?.id || 'unknown',
           employee_id: req.employee_id,
@@ -709,10 +1062,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
 
         setTimeEntries(prev => [...prev, newEntry]);
+        supabase.from('time_entries').insert(newEntry).then();
 
         // Audit Log
         const log: AuditLog = {
-          id: 'audit-' + Math.random().toString(36).substr(2, 9),
+          id: crypto.randomUUID(),
           company_id: req.company_id,
           entity_type: 'time_entries',
           entity_id: newEntry.id,
@@ -723,31 +1077,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           performed_at: new Date().toISOString()
         };
         setAuditLogs(prev => [...prev, log]);
+        supabase.from('audit_logs').insert(log).then();
       } else if (req.request_type === 'modify_existing' && req.time_entry_id) {
         const oldEntry = timeEntries.find(t => t.id === req.time_entry_id);
         
-        setTimeEntries(prev => prev.map(t => t.id === req.time_entry_id ? {
-          ...t,
+        const updatedEntry = {
           entry_type: req.requested_entry_type,
           registered_at: regTime,
-          source: 'approved_request',
+          source: 'approved_request' as TimeEntrySource,
           updated_at: new Date().toISOString()
-        } : t));
+        };
+        setTimeEntries(prev => prev.map(t => t.id === req.time_entry_id ? { ...t, ...updatedEntry } : t));
+        supabase.from('time_entries').update(updatedEntry).eq('id', req.time_entry_id).then();
 
         // Audit Log
         const log: AuditLog = {
-          id: 'audit-' + Math.random().toString(36).substr(2, 9),
+          id: crypto.randomUUID(),
           company_id: req.company_id,
           entity_type: 'time_entries',
           entity_id: req.time_entry_id,
           action: 'update_approved_request',
           old_values: oldEntry,
-          new_values: { entry_type: req.requested_entry_type, registered_at: regTime },
+          new_values: updatedEntry,
           reason: `Solicitud de modificación aprobada. Motivo: ${responseText}`,
           performed_by: currentUser.profile?.id,
           performed_at: new Date().toISOString()
         };
         setAuditLogs(prev => [...prev, log]);
+        supabase.from('audit_logs').insert(log).then();
       }
     }
   };
@@ -763,7 +1120,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentUser.role !== 'employee' || !currentUser.employee || !currentCompany) return;
 
     const newReq: CorrectionRequest = {
-      id: 'req-' + Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       company_id: currentCompany.id,
       employee_id: currentUser.employee.id,
       time_entry_id: entryId,
@@ -777,6 +1134,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setRequests(prev => [newReq, ...prev]);
+    supabase.from('correction_requests').insert(newReq).then(({ error }) => {
+      if (error) console.error("Error submitting correction request:", error);
+    });
   };
 
   const deleteOldEntries = (companyId: string) => {
@@ -789,15 +1149,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return !isOld;
     }));
 
-    // Audit logs are cleared for deleted records
     setIncidents(prev => prev.filter(i => {
       const isOld = new Date(i.created_at) < fourYearsAgo && i.company_id === companyId;
       return !isOld;
     }));
 
+    // Delete in Supabase
+    supabase.from('time_entries').delete().eq('company_id', companyId).lt('registered_at', fourYearsAgo.toISOString()).then();
+    supabase.from('time_entry_incidents').delete().eq('company_id', companyId).lt('created_at', fourYearsAgo.toISOString()).then();
+
     // Record audit of this global action
     const log: AuditLog = {
-      id: 'audit-' + Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       company_id: companyId,
       entity_type: 'company',
       entity_id: companyId,
@@ -807,6 +1170,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       performed_at: new Date().toISOString()
     };
     setAuditLogs(prev => [...prev, log]);
+    supabase.from('audit_logs').insert(log).then();
   };
 
   const updateCompanySettings = (timeout: number) => {
@@ -814,9 +1178,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCompanies(prev => prev.map(c => c.id === currentCompany.id ? { ...c, session_timeout_minutes: timeout, updated_at: new Date().toISOString() } : c));
     setCurrentCompany(prev => prev ? { ...prev, session_timeout_minutes: timeout } : undefined);
 
+    supabase.from('companies').update({
+      session_timeout_minutes: timeout,
+      updated_at: new Date().toISOString()
+    }).eq('id', currentCompany.id).then(({ error }) => {
+      if (error) console.error("Error updating company settings in Supabase:", error);
+    });
+
     // Audit
     const log: AuditLog = {
-      id: 'audit-' + Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       company_id: currentCompany.id,
       entity_type: 'company',
       entity_id: currentCompany.id,
@@ -827,6 +1198,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       performed_at: new Date().toISOString()
     };
     setAuditLogs(prev => [...prev, log]);
+    supabase.from('audit_logs').insert(log).then();
   };
 
   return (
