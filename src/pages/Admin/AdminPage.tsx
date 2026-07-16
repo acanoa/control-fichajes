@@ -75,6 +75,7 @@ export const AdminPage: React.FC = () => {
   const [empHireDate, setEmpHireDate] = useState(new Date().toISOString().split('T')[0]);
   const [empStatus, setEmpStatus] = useState<'active' | 'inactive'>('active');
   const [empCentersSelected, setEmpCentersSelected] = useState<string[]>([]);
+  const [empCompanyId, setEmpCompanyId] = useState('');
 
   // Change PIN Form State
   const [showPinModal, setShowPinModal] = useState(false);
@@ -92,6 +93,7 @@ export const AdminPage: React.FC = () => {
   const [centerLng, setCenterLng] = useState<string>('');
   const [centerRadius, setCenterRadius] = useState<number>(50); // Default 50m
   const [centerStatus, setCenterStatus] = useState<'active' | 'inactive'>('active');
+  const [centerCompanyId, setCenterCompanyId] = useState('');
 
   // Add/Edit Device Form State
   const [showDeviceModal, setShowDeviceModal] = useState(false);
@@ -351,6 +353,7 @@ export const AdminPage: React.FC = () => {
       setEmpDept(emp.department || '');
       setEmpHireDate(emp.hire_date);
       setEmpStatus(emp.status);
+      setEmpCompanyId(emp.company_id);
       const centers = employeeWorkCenters
         .filter(ewc => ewc.employee_id === emp.id)
         .map(ewc => ewc.work_center_id);
@@ -365,6 +368,7 @@ export const AdminPage: React.FC = () => {
       setEmpDept('');
       setEmpHireDate(new Date().toISOString().split('T')[0]);
       setEmpStatus('active');
+      setEmpCompanyId(companyId);
       setEmpCentersSelected([]);
     }
     setShowEmpModal(true);
@@ -381,6 +385,7 @@ export const AdminPage: React.FC = () => {
     if (editingEmp) {
       updateEmployee({
         ...editingEmp,
+        company_id: empCompanyId,
         dni: empDni,
         full_name: empName,
         email: empEmail || undefined,
@@ -393,7 +398,7 @@ export const AdminPage: React.FC = () => {
     } else {
       const generatedPin = String(Math.floor(1000 + Math.random() * 9000));
       addEmployee({
-        company_id: companyId,
+        company_id: empCompanyId,
         dni: empDni,
         full_name: empName,
         pin_hash: generatedPin,
@@ -423,6 +428,7 @@ export const AdminPage: React.FC = () => {
     if (editingCenter) {
       updateWorkCenter({
         ...editingCenter,
+        company_id: centerCompanyId,
         name: centerName,
         address: centerAddress,
         latitude: lat,
@@ -431,7 +437,7 @@ export const AdminPage: React.FC = () => {
       });
       showAlert('Centro de trabajo modificado correctamente.', 'success');
     } else {
-      addWorkCenter(centerName, centerAddress, lat, lng, centerRadius, centerStatus);
+      addWorkCenter(centerCompanyId, centerName, centerAddress, lat, lng, centerRadius, centerStatus);
       showAlert('Centro de trabajo creado correctamente.', 'success');
     }
 
@@ -452,6 +458,7 @@ export const AdminPage: React.FC = () => {
       setCenterLat(center.latitude ? String(center.latitude) : '');
       setCenterLng(center.longitude ? String(center.longitude) : '');
       setCenterStatus(center.status);
+      setCenterCompanyId(center.company_id);
     } else {
       setEditingCenter(null);
       setCenterName('');
@@ -459,6 +466,7 @@ export const AdminPage: React.FC = () => {
       setCenterLat('');
       setCenterLng('');
       setCenterStatus('active');
+      setCenterCompanyId(companyId);
     }
     setShowCenterModal(true);
   };
@@ -1826,6 +1834,24 @@ export const AdminPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleEmpSubmit} className="p-5 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-subtext mb-1">Empresa</label>
+                <select
+                  value={empCompanyId}
+                  onChange={(e) => {
+                    setEmpCompanyId(e.target.value);
+                    setEmpCentersSelected([]);
+                  }}
+                  className="w-full px-3 py-2 rounded-lg border border-brand-border bg-white text-xs focus:ring-1 focus:ring-brand-maroon focus:outline-none"
+                  disabled={!isSuperadmin}
+                  required
+                >
+                  {companies.map(c => (
+                    <option key={c.id} value={c.id}>{c.commercial_name}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-subtext mb-1">DNI</label>
@@ -1917,7 +1943,7 @@ export const AdminPage: React.FC = () => {
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-subtext mb-1.5">Asignar Centros de Trabajo</label>
                 <div className="border border-brand-border rounded-lg p-2.5 space-y-1.5 max-h-28 overflow-y-auto bg-brand-cream/10">
-                  {companyCenters.map(center => {
+                  {workCenters.filter(wc => wc.company_id === empCompanyId).map(center => {
                     const isChecked = empCentersSelected.includes(center.id);
                     return (
                       <label key={center.id} className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
@@ -2028,6 +2054,21 @@ export const AdminPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleCenterSubmit} className="p-5 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-subtext mb-1">Empresa</label>
+                <select
+                  value={centerCompanyId}
+                  onChange={(e) => setCenterCompanyId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-brand-border bg-white text-xs focus:ring-1 focus:ring-brand-maroon focus:outline-none"
+                  disabled={!isSuperadmin}
+                  required
+                >
+                  {companies.map(c => (
+                    <option key={c.id} value={c.id}>{c.commercial_name}</option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-subtext mb-1">Nombre del Centro</label>
                 <input

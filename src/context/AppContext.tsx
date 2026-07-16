@@ -52,7 +52,7 @@ interface AppContextType {
   addEmployee: (emp: Omit<Employee, 'id' | 'employee_code' | 'employee_counter' | 'failed_pin_attempts' | 'created_at' | 'updated_at'>, allowedCenters?: string[]) => void;
   updateEmployee: (emp: Employee, allowedCenters?: string[]) => void;
   changeEmployeePin: (empId: string, newPin: string) => Promise<void>;
-  addWorkCenter: (name: string, address: string, lat?: number, lng?: number, radius?: number, status?: 'active' | 'inactive') => void;
+  addWorkCenter: (companyId: string, name: string, address: string, lat?: number, lng?: number, radius?: number, status?: 'active' | 'inactive') => void;
   updateWorkCenter: (center: WorkCenter) => void;
   updateDevice: (device: AuthorizedDevice) => void;
   resolveIncident: (incidentId: string, justification: string) => void;
@@ -272,9 +272,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentDevice) {
       const comp = companies.find(c => c.id === currentDevice.company_id);
       if (comp) {
-        // Strip non-digit characters and pad the remaining number to 5 digits: e.g. "0001" or "1" -> "00001"
+        // Strip non-digit characters and pad the remaining number to 4 digits: e.g. "0001" or "1" -> "0001"
         const cleanNumber = code.replace(/\D/g, '');
-        const paddedNumber = cleanNumber.padStart(5, '0');
+        const paddedNumber = cleanNumber.padStart(4, '0');
         cleanCode = `${comp.company_code}-${paddedNumber}`;
       }
     }
@@ -504,7 +504,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const maxCounter = compEmps.reduce((max, cur) => cur.employee_counter > max ? cur.employee_counter : max, 0);
     const newCounter = maxCounter + 1;
 
-    const counterStr = String(newCounter).padStart(5, '0');
+    const counterStr = String(newCounter).padStart(4, '0');
     const empCode = `${company.company_code}-${counterStr}`;
 
     const newEmp: Employee = {
@@ -597,11 +597,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addWorkCenter = (name: string, address: string, lat?: number, lng?: number, radius?: number, status?: 'active' | 'inactive') => {
-    if (!currentCompany) return;
+  const addWorkCenter = (companyId: string, name: string, address: string, lat?: number, lng?: number, radius?: number, status?: 'active' | 'inactive') => {
     const newCenter: WorkCenter = {
       id: 'wc-' + Math.random().toString(36).substr(2, 9),
-      company_id: currentCompany.id,
+      company_id: companyId,
       name,
       address,
       latitude: lat,
