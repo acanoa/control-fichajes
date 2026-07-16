@@ -234,6 +234,25 @@ export const AdminPage: React.FC = () => {
   const { present, resting, absent } = getEmployeeStatusToday();
   const pendingRequests = companyRequests.filter(r => r.status === 'pending');
 
+  const formatLastPunchTime = (dateStr?: string) => {
+    if (!dateStr) return 'Sin registros';
+    const date = new Date(dateStr);
+    const today = new Date();
+    
+    const isToday = date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear();
+      
+    const timeStr = date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    
+    if (isToday) {
+      return `Hoy a las ${timeStr}`;
+    } else {
+      const dateStrFormatted = date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      return `${dateStrFormatted} a las ${timeStr}`;
+    }
+  };
+
   // Superadmin: Company CRUD handlers
   const handleCompanySubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1114,9 +1133,17 @@ export const AdminPage: React.FC = () => {
                   ) : (
                     present.map(id => {
                       const emp = companyEmployees.find(e => e.id === id);
+                      const lastEntry = [...companyEntries]
+                        .filter(p => p.employee_id === id && p.entry_type === 'entry' && p.status === 'active')
+                        .sort((a, b) => new Date(b.registered_at).getTime() - new Date(a.registered_at).getTime())[0];
                       return (
                         <div key={id} className="py-2.5 flex items-center justify-between">
-                          <span className="text-brand-text font-bold">{emp?.full_name}</span>
+                          <div>
+                            <p className="text-brand-text font-bold">{emp?.full_name}</p>
+                            <p className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                              Llegada: {formatLastPunchTime(lastEntry?.registered_at)}
+                            </p>
+                          </div>
                           <span className="font-mono text-[10px] text-brand-subtext">{emp?.employee_code}</span>
                         </div>
                       );
@@ -1136,9 +1163,17 @@ export const AdminPage: React.FC = () => {
                   ) : (
                     absent.map(id => {
                       const emp = companyEmployees.find(e => e.id === id);
+                      const lastExit = [...companyEntries]
+                        .filter(p => p.employee_id === id && p.entry_type === 'exit' && p.status === 'active')
+                        .sort((a, b) => new Date(b.registered_at).getTime() - new Date(a.registered_at).getTime())[0];
                       return (
                         <div key={id} className="py-2.5 flex items-center justify-between">
-                          <span className="text-brand-text font-bold">{emp?.full_name}</span>
+                          <div>
+                            <p className="text-brand-text font-bold">{emp?.full_name}</p>
+                            <p className="text-[10px] text-rose-600 font-bold mt-0.5">
+                              Última Salida: {formatLastPunchTime(lastExit?.registered_at)}
+                            </p>
+                          </div>
                           <span className="font-mono text-[10px] text-brand-subtext">{emp?.employee_code}</span>
                         </div>
                       );
