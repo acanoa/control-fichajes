@@ -48,7 +48,7 @@ interface AppContextType {
   loginEmployee: (pin: string) => Promise<Employee>;
   loginAdmin: (email: string, pass: string) => Promise<Profile>;
   logout: () => void;
-  registerPunch: (type: EntryType, photoBase64: string | null, lat?: number, lng?: number, cameraError?: string, gpsError?: string) => Promise<TimeEntry>;
+  registerPunch: (type: EntryType, photoBase64: string | null, lat?: number, lng?: number, cameraError?: string, gpsError?: string, manualReason?: string) => Promise<TimeEntry>;
   
   // Admin functions
   addEmployee: (emp: Omit<Employee, 'id' | 'employee_code' | 'employee_counter' | 'failed_pin_attempts' | 'created_at' | 'updated_at'>, allowedCenters?: string[]) => void;
@@ -729,7 +729,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     lat?: number, 
     lng?: number,
     cameraError?: string,
-    gpsError?: string
+    gpsError?: string,
+    manualReason?: string
   ): Promise<TimeEntry> => {
     if (currentUser.role !== 'employee' || !currentUser.employee || !currentCompany || !currentWorkCenter) {
       throw new Error('Sesión de empleado inválida.');
@@ -779,7 +780,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Determine Incident flags
     const photo_status = photoBase64 ? 'success' : (cameraError ? 'failed' : 'missing');
     const gps_status = lat && lng ? 'success' : (gpsError ? 'failed' : 'missing');
-    const has_incident = photo_status !== 'success' || gps_status !== 'success';
+    const has_incident = photo_status !== 'success' || gps_status !== 'success' || !!manualReason;
 
     const newEntry: TimeEntry = {
       id: safeUUID(),
@@ -797,6 +798,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       has_incident,
       source: 'employee',
       status: 'active',
+      manual_reason: manualReason || undefined,
       created_by: emp.id,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -818,8 +820,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         employee_id: emp.id,
         device_id: currentDevice?.id,
         time_entry_id: newEntry.id,
-        incident_type: cameraError || gpsError || 'Fichaje incompleto',
-        description: `Incidencia registrada: ${cameraError ? 'Cámara (' + cameraError + ')' : ''} ${gpsError ? 'GPS (' + gpsError + ')' : ''}`,
+        incident_type: manualReason ? 'Reporte Manual' : (cameraError || gpsError || 'Fichaje incompleto'),
+        description: manualReason ? `Comentario de empleado: ${manualReason}` : `Incidencia registrada: ${cameraError ? 'Cámara (' + cameraError + ')' : ''} ${gpsError ? 'GPS (' + gpsError + ')' : ''}`,
         missing_photo: photo_status !== 'success',
         missing_gps: gps_status !== 'success',
         created_at: new Date().toISOString()

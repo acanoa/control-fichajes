@@ -21,6 +21,10 @@ export const EmployeePage: React.FC = () => {
   // GPS state
   const [gpsStatus, setGpsStatus] = useState<'idle' | 'acquiring' | 'ok' | 'error'>('idle');
 
+  // Custom incident report state
+  const [reportIncident, setReportIncident] = useState(false);
+  const [incidentComment, setIncidentComment] = useState('');
+
   // Punch screen state
   const [punchingType, setPunchingType] = useState<EntryType | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -112,7 +116,7 @@ export const EmployeePage: React.FC = () => {
     if (simulateCameraFail || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       // Direct jump to register since camera isn't accessible, log as incident
       const errorMsg = !navigator.mediaDevices ? 'Acceso bloqueado por navegador (Conexión insegura HTTP)' : 'Cámara no disponible / Permiso denegado';
-      registerPunchAction(type, null, errorMsg);
+      registerPunchAction(type, null, errorMsg, reportIncident ? incidentComment : undefined);
       return;
     }
 
@@ -128,7 +132,7 @@ export const EmployeePage: React.FC = () => {
       }, 500);
     } catch (err) {
       // Fallback: camera error but PRD says let employee complete the punch with an incident
-      registerPunchAction(type, null, 'Permiso de cámara denegado');
+      registerPunchAction(type, null, 'Permiso de cámara denegado', reportIncident ? incidentComment : undefined);
     }
   };
 
@@ -148,12 +152,12 @@ export const EmployeePage: React.FC = () => {
         cameraStream.getTracks().forEach(track => track.stop());
         setCameraStream(null);
 
-        registerPunchAction(punchingType!, imgBase64);
+        registerPunchAction(punchingType!, imgBase64, undefined, reportIncident ? incidentComment : undefined);
       }
     }
   };
 
-  const registerPunchAction = async (type: EntryType, photo: string | null, camErr?: string) => {
+  const registerPunchAction = async (type: EntryType, photo: string | null, camErr?: string, manualReason?: string) => {
     setPunchStep('registering');
 
     // Real GPS acquisition
@@ -187,7 +191,7 @@ export const EmployeePage: React.FC = () => {
     }
 
     try {
-      const entry = await registerPunch(type, photo, lat, lng, camErr, gpsErr);
+      const entry = await registerPunch(type, photo, lat, lng, camErr, gpsErr, manualReason);
       
       // Success Confetti!
       confetti({
@@ -207,6 +211,8 @@ export const EmployeePage: React.FC = () => {
       setPunchSuccess(typeLabels[type]);
       setPunchStep('idle');
       setPunchingType(null);
+      setReportIncident(false);
+      setIncidentComment('');
       setTimeout(() => setGpsStatus('idle'), 3000); // hide GPS badge after 3s
     } catch (err: any) {
       setPunchError(err.message || 'Error registrando el fichaje.');
@@ -223,6 +229,8 @@ export const EmployeePage: React.FC = () => {
     }
     setPunchStep('idle');
     setPunchingType(null);
+    setReportIncident(false);
+    setIncidentComment('');
   };
 
   // Submit Request Action
@@ -431,6 +439,38 @@ export const EmployeePage: React.FC = () => {
                     Fichar Ahora
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Manual Incident Report Section */}
+            {punchStep === 'idle' && (
+              <div className="bg-brand-cream/30 p-4 rounded-2xl border border-brand-border/60 space-y-3">
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs font-extrabold text-brand-text">
+                  <input
+                    type="checkbox"
+                    checked={reportIncident}
+                    onChange={(e) => {
+                      setReportIncident(e.target.checked);
+                      if (!e.target.checked) setIncidentComment('');
+                    }}
+                    className="rounded text-brand-maroon focus:ring-brand-maroon"
+                  />
+                  ⚠️ Reportar Incidencia o Comentario en este fichaje
+                </label>
+
+                {reportIncident && (
+                  <div className="space-y-1.5 animate-fade-in">
+                    <label className="block text-[9px] font-black uppercase tracking-wider text-brand-subtext">Motivo / Descripción de la Incidencia</label>
+                    <textarea
+                      value={incidentComment}
+                      onChange={(e) => setIncidentComment(e.target.value)}
+                      placeholder="Ej. Retraso por tráfico, corte de suministro, problema con dispositivo, etc."
+                      rows={2}
+                      className="w-full p-2.5 rounded-xl border border-brand-border text-xs focus:outline-none focus:ring-1 focus:ring-brand-maroon bg-white font-sans font-medium"
+                      required
+                    />
+                  </div>
+                )}
               </div>
             )}
 
