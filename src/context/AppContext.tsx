@@ -55,6 +55,7 @@ interface AppContextType {
   changeEmployeePin: (empId: string, newPin: string) => Promise<void>;
   addWorkCenter: (companyId: string, name: string, address: string, lat?: number, lng?: number, radius?: number, status?: 'active' | 'inactive') => void;
   updateWorkCenter: (center: WorkCenter) => void;
+  deleteWorkCenter: (centerId: string) => Promise<void>;
   updateDevice: (device: AuthorizedDevice) => void;
   resolveIncident: (incidentId: string, justification: string) => void;
   resolveRequest: (reqId: string, status: 'approved' | 'rejected', responseText: string) => void;
@@ -958,6 +959,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const deleteWorkCenter = async (centerId: string): Promise<void> => {
+    // Check if there are associated time entries
+    const hasEntries = timeEntries.some(t => t.work_center_id === centerId);
+    if (hasEntries) {
+      throw new Error('No se puede eliminar el centro de trabajo porque tiene registros de fichajes asociados.');
+    }
+
+    // Check if there are active devices
+    const hasDevices = devices.some(d => d.work_center_id === centerId && d.status === 'active');
+    if (hasDevices) {
+      throw new Error('No se puede eliminar el centro de trabajo porque tiene dispositivos activos asociados.');
+    }
+
+    // Update state
+    setWorkCenters(prev => prev.filter(wc => wc.id !== centerId));
+    // Remove employee work center mappings
+    rawSetEmployeeWorkCenters(prev => prev.filter(ewc => ewc.work_center_id !== centerId));
+
+    // Delete in Supabase: employee work center mappings first
+    await supabase.from('employee_work_centers').delete().eq('work_center_id', centerId);
+    // Delete in Supabase: work center itself
+    const { error } = await supabase.from('work_centers').delete().eq('id', centerId);
+    if (error) {
+      console.error("Error deleting work center in Supabase:", error);
+      throw new Error("No se pudo eliminar el centro de trabajo en la base de datos.");
+    }
+  };
+
   const updateDevice = (device: AuthorizedDevice) => {
     const updated = { ...device, updated_at: new Date().toISOString() };
     setDevices(prev => prev.map(d => d.id === device.id ? updated : d));
@@ -1207,7 +1236,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       employeeWorkCenters, setEmployeeWorkCenters,
       currentUser, currentCompany, currentWorkCenter, currentDevice, isDeviceAuthorized,
       authorizeDevice, deauthorizeDevice, loginEmployee, loginAdmin, logout, registerPunch,
-      addEmployee, updateEmployee, changeEmployeePin, addWorkCenter, updateWorkCenter, updateDevice, resolveIncident, resolveRequest, submitRequest, deleteOldEntries, updateCompanySettings,
+      addEmployee, updateEmployee, changeEmployeePin, addWorkCenter, updateWorkCenter, deleteWorkCenter, updateDevice, resolveIncident, resolveRequest, submitRequest, deleteOldEntries, updateCompanySettings,
       showAlert
     }}>
       {children}

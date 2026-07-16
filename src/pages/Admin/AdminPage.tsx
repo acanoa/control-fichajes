@@ -18,7 +18,7 @@ export const AdminPage: React.FC = () => {
     employees, workCenters, devices, timeEntries,
     incidents, requests, auditLogs, employeeWorkCenters,
     addEmployee, updateEmployee, changeEmployeePin,
-    addWorkCenter, updateWorkCenter, updateDevice, resolveIncident,
+    addWorkCenter, updateWorkCenter, deleteWorkCenter, updateDevice, resolveIncident,
     deauthorizeDevice, resolveRequest, deleteOldEntries, updateCompanySettings,
     setTimeEntries, showAlert
   } = useApp();
@@ -1112,7 +1112,23 @@ export const AdminPage: React.FC = () => {
                       <p className="text-[10px] font-mono text-brand-subtext">GPS: {center.latitude}, {center.longitude} (R: {center.latitude}m)</p>
                     )}
                   </div>
-                  <div className="flex justify-end pt-3 border-t border-brand-border/40 mt-4">
+                  <div className="flex justify-end gap-2 pt-3 border-t border-brand-border/40 mt-4">
+                    <button
+                      onClick={async () => {
+                        if (window.confirm(`¿Está seguro de que desea eliminar el centro "${center.name}"?`)) {
+                          try {
+                            await deleteWorkCenter(center.id);
+                            showAlert('Centro de trabajo eliminado con éxito.', 'success');
+                          } catch (err: any) {
+                            showAlert(err.message || 'Error al eliminar el centro de trabajo.', 'error');
+                          }
+                        }
+                      }}
+                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                      title="Eliminar Centro"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => openCenterModal(center)}
                       className="p-1.5 text-brand-maroon hover:bg-brand-cream/50 rounded-lg transition-all"
