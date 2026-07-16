@@ -109,6 +109,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return `${prefix}-0000-0000-0000-${hex.padStart(12, '0')}`;
   };
 
+  const safeUUID = (): string => {
+    if (typeof window !== 'undefined' && window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  };
+
   // Sync with Supabase on mount (or auto-seed if database is empty)
   useEffect(() => {
     const loadFromSupabase = async () => {
@@ -462,9 +473,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Actions
   const authorizeDevice = async (name: string, companyId: string, workCenterId: string, cameraWorking: boolean): Promise<AuthorizedDevice> => {
-    const token = crypto.randomUUID();
+    const token = safeUUID();
     const newDevice: AuthorizedDevice = {
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       company_id: companyId,
       work_center_id: workCenterId,
       name,
@@ -734,7 +745,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const has_incident = photo_status !== 'success' || gps_status !== 'success';
 
     const newEntry: TimeEntry = {
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       company_id: currentCompany.id,
       work_center_id: currentWorkCenter.id,
       employee_id: emp.id,
@@ -764,7 +775,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Handle Incidents logging
     if (has_incident) {
       const newInc: TimeEntryIncident = {
-        id: crypto.randomUUID(),
+        id: safeUUID(),
         company_id: currentCompany.id,
         work_center_id: currentWorkCenter.id,
         employee_id: emp.id,
@@ -806,7 +817,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const counterStr = String(newCounter).padStart(4, '0');
     const empCode = `${company.company_code}-${counterStr}`;
 
-    const newEmpId = crypto.randomUUID();
+    const newEmpId = safeUUID();
     const newEmp: Employee = {
       ...emp,
       id: newEmpId,
@@ -826,7 +837,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (allowedCenters && allowedCenters.length) {
       const mappings: EmployeeWorkCenter[] = allowedCenters.map(cid => ({
-        id: crypto.randomUUID(),
+        id: safeUUID(),
         employee_id: newEmp.id,
         work_center_id: cid,
         created_at: new Date().toISOString()
@@ -840,7 +851,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const log: AuditLog = {
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       company_id: emp.company_id,
       entity_type: 'employees',
       entity_id: newEmp.id,
@@ -865,7 +876,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (allowedCenters) {
       const mappings = allowedCenters.map(cid => ({
-        id: crypto.randomUUID(),
+        id: safeUUID(),
         employee_id: emp.id,
         work_center_id: cid,
         created_at: new Date().toISOString()
@@ -887,7 +898,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const log: AuditLog = {
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       company_id: emp.company_id,
       entity_type: 'employees',
       entity_id: emp.id,
@@ -919,7 +930,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const emp = employees.find(e => e.id === empId);
     if (emp) {
       const log: AuditLog = {
-        id: crypto.randomUUID(),
+        id: safeUUID(),
         company_id: emp.company_id,
         entity_type: 'employees',
         entity_id: empId,
@@ -935,7 +946,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addWorkCenter = (companyId: string, name: string, address: string, lat?: number, lng?: number, radius?: number, status?: 'active' | 'inactive') => {
     const newCenter: WorkCenter = {
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       company_id: companyId,
       name,
       address,
@@ -1035,7 +1046,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const log: AuditLog = {
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       company_id: inc.company_id,
       entity_type: 'time_entry_incidents',
       entity_id: incidentId,
@@ -1075,7 +1086,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       if (req.request_type === 'create_missing') {
         const newEntry: TimeEntry = {
-          id: crypto.randomUUID(),
+          id: safeUUID(),
           company_id: req.company_id,
           work_center_id: workCenters.find(w => w.company_id === req.company_id)?.id || 'unknown',
           employee_id: req.employee_id,
@@ -1095,7 +1106,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // Audit Log
         const log: AuditLog = {
-          id: crypto.randomUUID(),
+          id: safeUUID(),
           company_id: req.company_id,
           entity_type: 'time_entries',
           entity_id: newEntry.id,
@@ -1121,7 +1132,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // Audit Log
         const log: AuditLog = {
-          id: crypto.randomUUID(),
+          id: safeUUID(),
           company_id: req.company_id,
           entity_type: 'time_entries',
           entity_id: req.time_entry_id,
@@ -1149,7 +1160,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentUser.role !== 'employee' || !currentUser.employee || !currentCompany) return;
 
     const newReq: CorrectionRequest = {
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       company_id: currentCompany.id,
       employee_id: currentUser.employee.id,
       time_entry_id: entryId,
@@ -1189,7 +1200,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Record audit of this global action
     const log: AuditLog = {
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       company_id: companyId,
       entity_type: 'company',
       entity_id: companyId,
@@ -1216,7 +1227,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Audit
     const log: AuditLog = {
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       company_id: currentCompany.id,
       entity_type: 'company',
       entity_id: currentCompany.id,
