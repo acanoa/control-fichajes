@@ -408,14 +408,20 @@ export const EmployeePage: React.FC = () => {
             {/* Camera Preview modal overlay inside container */}
             {punchStep === 'camera_preview' && (
               <div className="bg-black border border-brand-border rounded-2xl overflow-hidden p-4 flex flex-col items-center justify-center space-y-4 shadow-xl">
-                <div className="flex items-center justify-between w-full text-white px-2">
-                  <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1">
-                    <Camera className="w-4 h-4 text-brand-maroon" />
-                    Cámara Frontal Obligatoria
+                <div className="flex items-center justify-between w-full text-white px-2 border-b border-white/10 pb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-brand-maroon">
+                    <Camera className="w-4 h-4" />
+                    CONFIRMAR FICHAJE
                   </span>
                   <button onClick={handleCancelPunch} className="p-1 hover:bg-white/10 rounded-full">
                     <X className="w-5 h-5 text-white" />
                   </button>
+                </div>
+
+                {/* Confirm employee name block */}
+                <div className="text-center text-white bg-white/5 py-2.5 px-4 rounded-xl border border-white/10 w-full max-w-xs">
+                  <p className="text-[10px] font-black uppercase text-brand-cream/60 tracking-wider">Empleado Identificado</p>
+                  <h3 className="text-base font-extrabold text-brand-cream mt-0.5">{employee.full_name}</h3>
                 </div>
 
                 <div className="relative aspect-video max-w-md w-full bg-zinc-950 rounded-xl overflow-hidden flex items-center justify-center border border-white/10">

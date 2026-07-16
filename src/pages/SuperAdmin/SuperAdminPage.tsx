@@ -4,7 +4,7 @@ import { Company, Profile, GlobalSetting } from '../../types';
 import { 
   Building, Shield, Users, Clock, AlertTriangle, 
   Settings, LogOut, Check, X, Plus, ShieldAlert, Trash2, Key, Video,
-  Pencil, UserCheck, Lock, Unlock
+  Pencil, UserCheck, Lock, Unlock, Eye, Compass
 } from 'lucide-react';
 
 export const SuperAdminPage: React.FC = () => {
@@ -57,6 +57,10 @@ export const SuperAdminPage: React.FC = () => {
   const [photoViewerUrl, setPhotoViewerUrl] = useState('');
   const [photoViewerTitle, setPhotoViewerTitle] = useState('');
   const [photoViewerSub, setPhotoViewerSub] = useState('');
+
+  // Time Entry Detail Modal State
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<any | null>(null);
 
   // Filters for lists
   const [filterCompanyId, setFilterCompanyId] = useState('');
@@ -568,6 +572,7 @@ export const SuperAdminPage: React.FC = () => {
                     <th className="px-4 py-3">Foto Evidencia</th>
                     <th className="px-4 py-3">Ubicación GPS</th>
                     <th className="px-4 py-3">Estado</th>
+                    <th className="px-4 py-3">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-border text-xs font-semibold">
@@ -607,6 +612,18 @@ export const SuperAdminPage: React.FC = () => {
                           {entry.latitude && entry.longitude ? `${entry.latitude.toFixed(4)}, ${entry.longitude.toFixed(4)}` : 'N/D'}
                         </td>
                         <td className="px-4 py-3.5 uppercase font-bold text-[9px]">{entry.status}</td>
+                        <td className="px-4 py-3.5">
+                          <button
+                            onClick={() => {
+                              setSelectedEntry(entry);
+                              setShowDetailModal(true);
+                            }}
+                            className="px-2.5 py-1 bg-brand-cream border border-brand-border text-brand-maroon rounded-lg hover:bg-brand-maroon hover:text-white transition-all text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm active:scale-95"
+                          >
+                            <Eye className="w-3 h-3" />
+                            Detalle
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -1027,6 +1044,167 @@ export const SuperAdminPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* TIME ENTRY DETAIL MODAL */}
+      {showDetailModal && selectedEntry && (() => {
+        const comp = companies.find(c => c.id === selectedEntry.company_id);
+        const emp = employees.find(e => e.id === selectedEntry.employee_id);
+        const wc = workCenters.find(w => w.id === selectedEntry.work_center_id);
+        const dev = devices.find(d => d.id === selectedEntry.device_id);
+        
+        return (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-scale-up border border-brand-border flex flex-col max-h-[90vh]">
+              {/* Header */}
+              <div className="bg-brand-maroon px-6 py-4 flex items-center justify-between text-white shrink-0">
+                <div>
+                  <h3 className="font-black text-sm uppercase tracking-wider font-sans">Detalle del Fichaje</h3>
+                  <p className="text-[10px] text-white/80 font-medium mt-0.5">
+                    ID: {selectedEntry.id.substring(0, 8)}...
+                  </p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setShowDetailModal(false);
+                    setSelectedEntry(null);
+                  }} 
+                  className="p-1 hover:bg-white/10 rounded-full transition-all text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body (scrollable) */}
+              <div className="p-6 overflow-y-auto space-y-6 bg-brand-cream/5 flex-1">
+                {/* Employee / Company Info Cards */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-brand-cream/20 p-3 rounded-xl border border-brand-border/40">
+                    <span className="text-[9px] font-black uppercase text-brand-subtext tracking-wider block">Empleado</span>
+                    <span className="text-xs font-bold text-brand-text block mt-0.5">{emp?.full_name || 'Desconocido'}</span>
+                    <span className="text-[10px] text-brand-subtext font-semibold block mt-0.5">Código: {emp?.employee_code || 'N/D'}</span>
+                  </div>
+                  <div className="bg-brand-cream/20 p-3 rounded-xl border border-brand-border/40">
+                    <span className="text-[9px] font-black uppercase text-brand-subtext tracking-wider block">Empresa</span>
+                    <span className="text-xs font-bold text-brand-text block mt-0.5">{comp?.legal_name || 'Desconocida'}</span>
+                    <span className="text-[10px] text-brand-subtext font-semibold block mt-0.5">Comercial: {comp?.commercial_name || 'N/D'}</span>
+                  </div>
+                </div>
+
+                {/* Entry details table */}
+                <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
+                  <div className="grid grid-cols-2 border-b border-brand-border px-4 py-2 text-xs">
+                    <span className="font-bold text-brand-subtext">Centro de Trabajo</span>
+                    <span className="font-semibold text-brand-text text-right">{wc?.name || 'N/D'}</span>
+                  </div>
+                  <div className="grid grid-cols-2 border-b border-brand-border px-4 py-2 text-xs">
+                    <span className="font-bold text-brand-subtext">Fecha y Hora</span>
+                    <span className="font-semibold text-brand-text text-right">
+                      {new Date(selectedEntry.registered_at).toLocaleString('es-ES')}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 border-b border-brand-border px-4 py-2 text-xs">
+                    <span className="font-bold text-brand-subtext">Tipo de Fichaje</span>
+                    <span className="font-semibold text-right">
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-black ${
+                        selectedEntry.entry_type === 'entry' ? 'bg-emerald-50 text-emerald-800' :
+                        selectedEntry.entry_type === 'exit' ? 'bg-rose-50 text-rose-800' :
+                        'bg-amber-50 text-amber-800'
+                      }`}>
+                        {selectedEntry.entry_type.toUpperCase()}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 border-b border-brand-border px-4 py-2 text-xs">
+                    <span className="font-bold text-brand-subtext">Dispositivo de Origen</span>
+                    <span className="font-semibold text-brand-text text-right">{dev?.name || selectedEntry.source}</span>
+                  </div>
+                  <div className="grid grid-cols-2 border-b border-brand-border px-4 py-2 text-xs">
+                    <span className="font-bold text-brand-subtext">Estado del Registro</span>
+                    <span className="font-bold text-right text-[10px] uppercase">
+                      {selectedEntry.status === 'active' ? (
+                        <span className="text-emerald-700">Activo / Válido</span>
+                      ) : (
+                        <span className="text-red-605">Anulado / Inactivo</span>
+                      )}
+                    </span>
+                  </div>
+                  {selectedEntry.manual_reason && (
+                    <div className="px-4 py-3 text-xs bg-amber-50 border-t border-brand-border/60">
+                      <span className="font-black text-[9px] uppercase tracking-wider text-amber-800 block mb-1">Comentario / Incidencia del Empleado</span>
+                      <p className="italic text-brand-text bg-white p-2 rounded-lg border border-brand-border/50">{selectedEntry.manual_reason}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Photo & GPS Map side by side */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Photo Box */}
+                  <div className="space-y-1.5">
+                    <span className="text-[9px] font-black uppercase text-brand-subtext tracking-wider block">Foto Selfie Evidencia</span>
+                    <div className="w-full aspect-[3/4] rounded-xl border border-brand-border overflow-hidden bg-black flex items-center justify-center shadow-inner relative">
+                      {selectedEntry.photo_path ? (
+                        <img 
+                          src={selectedEntry.photo_path} 
+                          alt="Selfie" 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Sin Foto</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* GPS Box */}
+                  <div className="space-y-2 flex flex-col justify-between">
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] font-black uppercase text-brand-subtext tracking-wider block">Ubicación Fichaje</span>
+                      <div className="p-3 bg-brand-cream/20 rounded-xl border border-brand-border/50 text-xs space-y-1">
+                        <p className="font-bold text-brand-text flex items-center gap-1.5">
+                          <Compass className="w-3.5 h-3.5 text-brand-maroon" />
+                          Coordenadas GPS
+                        </p>
+                        {selectedEntry.latitude && selectedEntry.longitude ? (
+                          <div className="space-y-1 mt-1.5 font-mono text-[10px] text-brand-text">
+                            <p>Lat: {selectedEntry.latitude.toFixed(6)}</p>
+                            <p>Lng: {selectedEntry.longitude.toFixed(6)}</p>
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-red-500 font-bold uppercase mt-1">Ubicación No Disponible</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {selectedEntry.latitude && selectedEntry.longitude && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${selectedEntry.latitude},${selectedEntry.longitude}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl active:scale-95 transition-all shadow-sm uppercase tracking-wider text-center block"
+                      >
+                        Abrir en Google Maps
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-brand-cream/30 px-6 py-4 flex justify-end border-t border-brand-border shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDetailModal(false);
+                    setSelectedEntry(null);
+                  }}
+                  className="px-5 py-2 bg-brand-maroon hover:bg-brand-maroon/90 text-white text-xs font-black rounded-xl active:scale-95 transition-all shadow-sm uppercase tracking-wider"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
