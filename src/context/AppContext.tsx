@@ -198,6 +198,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('cf_employees', JSON.stringify(employees));
   }, [employees]);
+
+  // Migration check for 5-digit employee codes to 4-digit codes in localStorage
+  useEffect(() => {
+    const hasFiveDigits = employees.some(emp => /^[A-Z0-9]+-\d{5}$/.test(emp.employee_code));
+    if (hasFiveDigits) {
+      const migrated = employees.map(emp => {
+        const match = emp.employee_code.match(/^([A-Z0-9]+)-(\d{5})$/);
+        if (match) {
+          const prefix = match[1];
+          const num = match[2];
+          const newNum = num.substring(1); // convert "00001" to "0001"
+          return {
+            ...emp,
+            employee_code: `${prefix}-${newNum}`
+          };
+        }
+        return emp;
+      });
+      setEmployees(migrated);
+    }
+  }, [employees]);
   useEffect(() => {
     localStorage.setItem('cf_devices', JSON.stringify(devices));
   }, [devices]);

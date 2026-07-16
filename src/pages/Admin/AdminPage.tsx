@@ -1834,22 +1834,47 @@ export const AdminPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleEmpSubmit} className="p-5 space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-subtext mb-1">Empresa</label>
-                <select
-                  value={empCompanyId}
-                  onChange={(e) => {
-                    setEmpCompanyId(e.target.value);
-                    setEmpCentersSelected([]);
-                  }}
-                  className="w-full px-3 py-2 rounded-lg border border-brand-border bg-white text-xs focus:ring-1 focus:ring-brand-maroon focus:outline-none"
-                  disabled={!isSuperadmin}
-                  required
-                >
-                  {companies.map(c => (
-                    <option key={c.id} value={c.id}>{c.commercial_name}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-subtext mb-1">Empresa</label>
+                  <select
+                    value={empCompanyId}
+                    onChange={(e) => {
+                      setEmpCompanyId(e.target.value);
+                      setEmpCentersSelected([]);
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-brand-border bg-white text-xs focus:ring-1 focus:ring-brand-maroon focus:outline-none"
+                    disabled={!isSuperadmin}
+                    required
+                  >
+                    {companies.map(c => (
+                      <option key={c.id} value={c.id}>{c.commercial_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  {editingEmp ? (
+                    <>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-subtext mb-1">Código de Empleado</label>
+                      <input
+                        type="text"
+                        value={editingEmp.employee_code}
+                        className="w-full px-3 py-2 rounded-lg border border-brand-border text-xs bg-brand-cream/10 text-brand-subtext font-mono"
+                        readOnly
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-subtext mb-1">Código (Autogenerado)</label>
+                      <input
+                        type="text"
+                        value="Prefijo-XXXX"
+                        className="w-full px-3 py-2 rounded-lg border border-brand-border text-xs bg-brand-cream/10 text-brand-subtext italic"
+                        readOnly
+                      />
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
