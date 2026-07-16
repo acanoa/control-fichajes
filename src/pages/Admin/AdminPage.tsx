@@ -144,6 +144,12 @@ export const AdminPage: React.FC = () => {
   const [resolveType, setResolveType] = useState<'approved' | 'rejected'>('approved');
   const [resolveResponseText, setResolveResponseText] = useState('');
 
+  // Photo Viewer Modal State
+  const [showPhotoViewer, setShowPhotoViewer] = useState(false);
+  const [photoViewerUrl, setPhotoViewerUrl] = useState('');
+  const [photoViewerTitle, setPhotoViewerTitle] = useState('');
+  const [photoViewerSub, setPhotoViewerSub] = useState('');
+
   // Manual Punch Form State
   const [showManualPunchModal, setShowManualPunchModal] = useState(false);
   const [manualEmpId, setManualEmpId] = useState('');
@@ -1419,7 +1425,17 @@ export const AdminPage: React.FC = () => {
                         <td className="px-4 py-3.5">
                           <div className="flex gap-2">
                             {entry.photo_path ? (
-                              <a href={entry.photo_path} target="_blank" rel="noreferrer" className="text-brand-maroon hover:underline font-bold text-[9px] uppercase">VER FOTO</a>
+                              <button
+                                onClick={() => {
+                                  setPhotoViewerUrl(entry.photo_path || '');
+                                  setPhotoViewerTitle(emp?.full_name || 'Empleado');
+                                  setPhotoViewerSub(`${entry.entry_type.toUpperCase()} — ${new Date(entry.registered_at).toLocaleDateString('es-ES')} a las ${new Date(entry.registered_at).toLocaleTimeString('es-ES')}`);
+                                  setShowPhotoViewer(true);
+                                }}
+                                className="text-brand-maroon hover:underline font-bold text-[9px] uppercase cursor-pointer bg-transparent border-none p-0 align-baseline"
+                              >
+                                VER FOTO
+                              </button>
                             ) : (
                               <span className="text-[9px] text-red-500 font-bold uppercase">SIN FOTO</span>
                             )}
@@ -2965,6 +2981,42 @@ export const AdminPage: React.FC = () => {
                   Confirmar Ubicación
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PHOTO VIEWER MODAL */}
+      {showPhotoViewer && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-scale-up border border-brand-border">
+            <div className="bg-brand-maroon px-6 py-4 flex items-center justify-between text-white">
+              <div>
+                <h3 className="font-black text-sm uppercase tracking-wider font-sans">{photoViewerTitle}</h3>
+                <p className="text-[10px] text-white/80 font-medium mt-0.5">{photoViewerSub}</p>
+              </div>
+              <button 
+                onClick={() => setShowPhotoViewer(false)} 
+                className="p-1 hover:bg-white/10 rounded-full transition-all text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 flex flex-col items-center justify-center bg-brand-cream/10">
+              <div className="w-full aspect-[3/4] max-h-[400px] rounded-2xl border border-brand-border overflow-hidden bg-black flex items-center justify-center shadow-md">
+                <img 
+                  src={photoViewerUrl} 
+                  alt="Fichaje Selfie" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPhotoViewer(false)}
+                className="mt-5 w-full py-2 bg-brand-maroon text-white text-xs font-bold rounded-xl hover:bg-brand-maroon/90 active:scale-95 transition-all shadow-sm uppercase tracking-wider"
+              >
+                Cerrar Vista
+              </button>
             </div>
           </div>
         </div>
