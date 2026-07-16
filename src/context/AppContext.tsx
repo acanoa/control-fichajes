@@ -323,6 +323,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...c,
         id: toUUID(c.id, '11111111')
       }));
+
+      // Propagation of company code changes to employee codes
+      mapped.forEach(newComp => {
+        const oldComp = prev.find(o => toUUID(o.id, '11111111') === newComp.id);
+        if (oldComp && oldComp.company_code !== newComp.company_code) {
+          const oldCode = oldComp.company_code;
+          const newCode = newComp.company_code;
+
+          // 1. Update React state for employees
+          setEmployees(empPrev => empPrev.map(emp => {
+            if (emp.company_id === newComp.id) {
+              const regex = new RegExp(`^${oldCode}-`);
+              if (regex.test(emp.employee_code)) {
+                return {
+                  ...emp,
+                  employee_code: emp.employee_code.replace(regex, `${newCode}-`),
+                  updated_at: new Date().toISOString()
+                };
+              }
+            }
+            return emp;
+          }));
+
+          // 2. Update Supabase employees table
+          supabase.from('employees').select('id, employee_code').eq('company_id', newComp.id).then(({ data }) => {
+            if (data) {
+              const updates = data.reduce((acc, emp) => {
+                const regex = new RegExp(`^${oldCode}-`);
+                if (regex.test(emp.employee_code)) {
+                  acc.push({
+                    id: emp.id,
+                    employee_code: emp.employee_code.replace(regex, `${newCode}-`),
+                    updated_at: new Date().toISOString()
+                  });
+                }
+                return acc;
+              }, [] as any[]);
+
+              if (updates.length > 0) {
+                supabase.from('employees').upsert(updates).then(({ error }) => {
+                  if (error) console.error("Error updating employee codes during company code change:", error);
+                });
+              }
+            }
+          });
+        }
+      });
+
       supabase.from('companies').upsert(mapped).then(({ error }) => {
         if (error) console.error("Error upserting companies to Supabase:", error);
       });
