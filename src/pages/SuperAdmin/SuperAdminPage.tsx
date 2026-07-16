@@ -13,10 +13,15 @@ export const SuperAdminPage: React.FC = () => {
     companies, setCompanies,
     profiles, setProfiles,
     workCenters, employees, devices, timeEntries,
-    incidents, auditLogs, deleteOldEntries
+    incidents, auditLogs, deleteOldEntries, refreshData
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'companies' | 'all_entries' | 'all_incidents' | 'all_audit' | 'settings' | 'all_employees' | 'all_centers' | 'all_devices'>('companies');
+
+  // Refresh data on sidebar tab switch
+  React.useEffect(() => {
+    refreshData();
+  }, [activeTab]);
 
   // Add / Edit Company Form
   const [showCompanyModal, setShowCompanyModal] = useState(false);

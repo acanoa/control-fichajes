@@ -20,7 +20,7 @@ export const AdminPage: React.FC = () => {
     addEmployee, updateEmployee, changeEmployeePin,
     addWorkCenter, updateWorkCenter, deleteWorkCenter, updateDevice, resolveIncident,
     deauthorizeDevice, resolveRequest, deleteOldEntries, updateCompanySettings,
-    setTimeEntries, showAlert
+    setTimeEntries, showAlert, refreshData
   } = useApp();
 
   const adminProfile = currentUser.profile;
@@ -39,6 +39,11 @@ export const AdminPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
     'companies' | 'dashboard' | 'employees' | 'centers' | 'devices' | 'entries' | 'requests' | 'incidents' | 'audit' | 'reports' | 'settings' | 'settings_global'
   >(isSuperadmin ? 'companies' : 'dashboard');
+
+  // Refresh data on sidebar tab switch
+  React.useEffect(() => {
+    refreshData();
+  }, [activeTab]);
 
   // Add/Edit Company Form State (Superadmin)
   const [showCompanyModal, setShowCompanyModal] = useState(false);

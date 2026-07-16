@@ -63,6 +63,7 @@ interface AppContextType {
   deleteOldEntries: (companyId: string) => void;
   updateCompanySettings: (timeout: number) => void;
   showAlert: (message: string, type?: 'success' | 'error' | 'info', title?: string) => void;
+  refreshData: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -120,16 +121,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const refreshData = async (): Promise<void> => {
+    try {
+      console.log("Refreshing data from Supabase...");
+      
+      const { data: dbComps } = await supabase.from('companies').select('*');
+      if (dbComps) rawSetCompanies(dbComps);
+
+      const { data: dbWcs } = await supabase.from('work_centers').select('*');
+      if (dbWcs) setWorkCenters(dbWcs);
+
+      const { data: dbProfs } = await supabase.from('profiles').select('*');
+      if (dbProfs) rawSetProfiles(dbProfs);
+
+      const { data: dbEmps } = await supabase.from('employees').select('*');
+      if (dbEmps) setEmployees(dbEmps);
+
+      const { data: dbDevs } = await supabase.from('authorized_devices').select('*');
+      if (dbDevs) setDevices(dbDevs);
+
+      const { data: dbEntries } = await supabase.from('time_entries').select('*');
+      if (dbEntries) rawSetTimeEntries(dbEntries);
+
+      const { data: dbIncidents } = await supabase.from('time_entry_incidents').select('*');
+      if (dbIncidents) setIncidents(dbIncidents);
+
+      const { data: dbRequests } = await supabase.from('correction_requests').select('*');
+      if (dbRequests) setRequests(dbRequests);
+
+      const { data: dbLogs } = await supabase.from('audit_logs').select('*');
+      if (dbLogs) setAuditLogs(dbLogs);
+
+      const { data: dbEwcs } = await supabase.from('employee_work_centers').select('*');
+      if (dbEwcs) rawSetEmployeeWorkCenters(dbEwcs);
+
+      console.log("Supabase database load/refresh completed successfully!");
+    } catch (err) {
+      console.warn("Could not load data from Supabase. Using localStorage fallback:", err);
+    }
+  };
+
   // Sync with Supabase on mount (or auto-seed if database is empty)
   useEffect(() => {
-    const loadFromSupabase = async () => {
+    const initLoad = async () => {
       try {
-        console.log("Loading data from Supabase...");
-        
-        // 1. Fetch companies
-        const { data: dbComps, error: compsErr } = await supabase.from('companies').select('*');
-        if (compsErr) throw compsErr;
-        
+        const { data: dbComps } = await supabase.from('companies').select('*');
         if (dbComps && dbComps.length === 0) {
           console.log("Supabase database is empty. Seeding with mock data...");
           // Seed Companies
@@ -202,48 +238,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (seededEwcs.length > 0) {
             await supabase.from('employee_work_centers').upsert(seededEwcs);
           }
-
-          // Reload from Supabase
-          const { data: reloadedComps } = await supabase.from('companies').select('*');
-          if (reloadedComps) rawSetCompanies(reloadedComps);
-        } else if (dbComps) {
-          rawSetCompanies(dbComps);
         }
-
-        // 2. Fetch other tables
-        const { data: dbWcs } = await supabase.from('work_centers').select('*');
-        if (dbWcs) setWorkCenters(dbWcs);
-
-        const { data: dbProfs } = await supabase.from('profiles').select('*');
-        if (dbProfs) rawSetProfiles(dbProfs);
-
-        const { data: dbEmps } = await supabase.from('employees').select('*');
-        if (dbEmps) setEmployees(dbEmps);
-
-        const { data: dbDevs } = await supabase.from('authorized_devices').select('*');
-        if (dbDevs) setDevices(dbDevs);
-
-        const { data: dbEntries } = await supabase.from('time_entries').select('*');
-        if (dbEntries) rawSetTimeEntries(dbEntries);
-
-        const { data: dbIncidents } = await supabase.from('time_entry_incidents').select('*');
-        if (dbIncidents) setIncidents(dbIncidents);
-
-        const { data: dbRequests } = await supabase.from('correction_requests').select('*');
-        if (dbRequests) setRequests(dbRequests);
-
-        const { data: dbLogs } = await supabase.from('audit_logs').select('*');
-        if (dbLogs) setAuditLogs(dbLogs);
-
-        const { data: dbEwcs } = await supabase.from('employee_work_centers').select('*');
-        if (dbEwcs) rawSetEmployeeWorkCenters(dbEwcs);
-
-        console.log("Supabase database load completed successfully!");
+        
+        await refreshData();
       } catch (err) {
-        console.warn("Could not load data from Supabase. Using localStorage fallback:", err);
+        console.warn("Could not seed data from Supabase. Falling back to local refresh:", err);
+        await refreshData();
       }
     };
-    loadFromSupabase();
+    initLoad();
   }, []);
 
   // Local DB States
@@ -1296,7 +1299,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser, currentCompany, currentWorkCenter, currentDevice, isDeviceAuthorized,
       authorizeDevice, deauthorizeDevice, loginEmployee, loginAdmin, logout, registerPunch,
       addEmployee, updateEmployee, changeEmployeePin, addWorkCenter, updateWorkCenter, deleteWorkCenter, updateDevice, resolveIncident, resolveRequest, submitRequest, deleteOldEntries, updateCompanySettings,
-      showAlert
+      showAlert, refreshData
     }}>
       {children}
 
