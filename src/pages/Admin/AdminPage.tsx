@@ -391,7 +391,7 @@ export const AdminPage: React.FC = () => {
         status: empStatus
       }, empCentersSelected);
     } else {
-      const generatedPin = String(Math.floor(10000 + Math.random() * 90000));
+      const generatedPin = String(Math.floor(1000 + Math.random() * 9000));
       addEmployee({
         company_id: companyId,
         dni: empDni,
@@ -499,8 +499,8 @@ export const AdminPage: React.FC = () => {
     e.preventDefault();
     setPinError('');
     setPinSuccess('');
-    if (newPinValue.length !== 5 || isNaN(Number(newPinValue))) {
-      setPinError('El PIN debe tener exactamente 5 números.');
+    if (newPinValue.length !== 4 || isNaN(Number(newPinValue))) {
+      setPinError('El PIN debe tener exactamente 4 números.');
       return;
     }
 
@@ -1976,17 +1976,17 @@ export const AdminPage: React.FC = () => {
               {pinSuccess && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-2.5 rounded-lg text-xs font-semibold">{pinSuccess}</div>}
 
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-subtext mb-1">Nuevo PIN (5 dígitos)</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-subtext mb-1">Nuevo PIN (4 dígitos)</label>
                 <input
                   type="text"
-                  maxLength={5}
+                  maxLength={4}
                   value={newPinValue}
                   onChange={(e) => {
                     setPinError('');
                     setNewPinValue(e.target.value.replace(/\D/g, ''));
                   }}
                   className="w-full text-center text-lg font-mono tracking-widest px-3 py-2.5 rounded-lg border border-brand-border"
-                  placeholder="12345"
+                  placeholder="1234"
                   required
                 />
                 <span className="text-[9px] text-brand-subtext/75 mt-1 block">

@@ -267,8 +267,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const loginEmployee = async (code: string, pin: string): Promise<Employee> => {
-    // Normalization
-    const cleanCode = code.trim().toUpperCase();
+    // Normalization and prepending the active terminal's company code
+    let cleanCode = code.trim().toUpperCase();
+    if (currentDevice) {
+      const comp = companies.find(c => c.id === currentDevice.company_id);
+      if (comp) {
+        // Strip non-digit characters and pad the remaining number to 5 digits: e.g. "0001" or "1" -> "00001"
+        const cleanNumber = code.replace(/\D/g, '');
+        const paddedNumber = cleanNumber.padStart(5, '0');
+        cleanCode = `${comp.company_code}-${paddedNumber}`;
+      }
+    }
 
     const emp = employees.find(e => e.employee_code === cleanCode);
     if (!emp) {
