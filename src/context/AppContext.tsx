@@ -44,6 +44,7 @@ interface AppContextType {
   // Actions
   authorizeDevice: (name: string, companyId: string, workCenterId: string, cameraWorking: boolean) => Promise<AuthorizedDevice>;
   deauthorizeDevice: (deviceId: string) => void;
+  deleteDevice: (deviceId: string) => Promise<void>;
   loginEmployee: (code: string, pin: string) => Promise<Employee>;
   loginAdmin: (email: string, pass: string) => Promise<Profile>;
   logout: () => void;
@@ -566,6 +567,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentDevice?.id === deviceId) {
       localStorage.removeItem('cf_device_token');
       setCurrentDevice(undefined);
+    }
+  };
+
+  const deleteDevice = async (deviceId: string): Promise<void> => {
+    // Remove from state
+    setDevices(prev => prev.filter(d => d.id !== deviceId));
+
+    // Clear localStorage if it was the active device
+    if (currentDevice?.id === deviceId) {
+      localStorage.removeItem('cf_device_token');
+      setCurrentDevice(undefined);
+    }
+
+    // Delete from Supabase
+    const { error } = await supabase.from('authorized_devices').delete().eq('id', deviceId);
+    if (error) {
+      console.error('Error deleting device from Supabase:', error);
+      throw new Error('No se pudo eliminar el dispositivo de la base de datos.');
     }
   };
 
@@ -1297,7 +1316,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       companies, setCompanies, workCenters, profiles, setProfiles, employees, devices, timeEntries, setTimeEntries, incidents, requests, auditLogs,
       employeeWorkCenters, setEmployeeWorkCenters,
       currentUser, currentCompany, currentWorkCenter, currentDevice, isDeviceAuthorized,
-      authorizeDevice, deauthorizeDevice, loginEmployee, loginAdmin, logout, registerPunch,
+      authorizeDevice, deauthorizeDevice, deleteDevice, loginEmployee, loginAdmin, logout, registerPunch,
       addEmployee, updateEmployee, changeEmployeePin, addWorkCenter, updateWorkCenter, deleteWorkCenter, updateDevice, resolveIncident, resolveRequest, submitRequest, deleteOldEntries, updateCompanySettings,
       showAlert, refreshData
     }}>

@@ -19,7 +19,7 @@ export const AdminPage: React.FC = () => {
     incidents, requests, auditLogs, employeeWorkCenters,
     addEmployee, updateEmployee, changeEmployeePin,
     addWorkCenter, updateWorkCenter, deleteWorkCenter, updateDevice, resolveIncident,
-    deauthorizeDevice, resolveRequest, deleteOldEntries, updateCompanySettings,
+    deauthorizeDevice, deleteDevice, resolveRequest, deleteOldEntries, updateCompanySettings,
     setTimeEntries, showAlert, refreshData
   } = useApp();
 
@@ -137,6 +137,11 @@ export const AdminPage: React.FC = () => {
   const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [purgeConfirmText, setPurgeConfirmText] = useState('');
   const [purgeTargetCompanyId, setPurgeTargetCompanyId] = useState('');
+
+  // Delete Device Confirmation State
+  const [showDeleteDeviceModal, setShowDeleteDeviceModal] = useState(false);
+  const [deleteDeviceTarget, setDeleteDeviceTarget] = useState<AuthorizedDevice | null>(null);
+  const [deleteDeviceError, setDeleteDeviceError] = useState('');
 
   // Report filters state
   const [reportEmpId, setReportEmpId] = useState('');
@@ -1205,6 +1210,13 @@ export const AdminPage: React.FC = () => {
                               <Power className="w-4 h-4" />
                             </button>
                           )}
+                          <button
+                            onClick={() => { setDeleteDeviceTarget(dev); setDeleteDeviceError(''); setShowDeleteDeviceModal(true); }}
+                            className="p-1.5 text-red-800 hover:bg-red-100 rounded-lg transition-all"
+                            title="Eliminar Dispositivo"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -2586,6 +2598,61 @@ export const AdminPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE DEVICE CONFIRMATION MODAL */}
+      {showDeleteDeviceModal && deleteDeviceTarget && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-brand-border rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-up">
+            <div className="bg-red-600 px-6 py-4 flex items-center gap-3">
+              <Trash2 className="w-5 h-5 text-white" />
+              <h3 className="text-white font-black text-base uppercase tracking-wider">Eliminar Dispositivo</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-brand-text text-sm">
+                ¿Estás seguro de que quieres <strong>eliminar definitivamente</strong> el dispositivo:
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                <p className="font-black text-red-900 text-sm">{deleteDeviceTarget.name}</p>
+                <p className="text-red-700 text-xs font-mono mt-0.5">{deleteDeviceTarget.device_token}</p>
+                <p className="text-red-600 text-xs mt-1">
+                  Centro: {workCenters.find(w => w.id === deleteDeviceTarget.work_center_id)?.name || 'N/D'} — Estado: {deleteDeviceTarget.status.toUpperCase()}
+                </p>
+              </div>
+              <p className="text-brand-subtext text-xs">
+                ⚠️ Esta acción es <strong>irreversible</strong>. El dispositivo se eliminará por completo de la base de datos. Si el terminal estaba activo, perderá el acceso inmediatamente.
+              </p>
+              {deleteDeviceError && (
+                <p className="text-red-600 text-xs font-semibold bg-red-50 border border-red-200 rounded-lg px-3 py-2">{deleteDeviceError}</p>
+              )}
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowDeleteDeviceModal(false); setDeleteDeviceTarget(null); }}
+                  className="px-4 py-2 text-xs font-bold text-brand-subtext border border-brand-border rounded-lg hover:bg-brand-cream/30"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await deleteDevice(deleteDeviceTarget.id);
+                      setShowDeleteDeviceModal(false);
+                      setDeleteDeviceTarget(null);
+                      showAlert('Dispositivo eliminado correctamente.', 'success');
+                    } catch (err: any) {
+                      setDeleteDeviceError(err.message || 'Error al eliminar el dispositivo.');
+                    }
+                  }}
+                  className="px-4 py-2 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-lg active:scale-95 transition-all"
+                >
+                  Sí, Eliminar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
