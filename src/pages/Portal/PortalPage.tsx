@@ -46,8 +46,8 @@ export const PortalPage: React.FC = () => {
 
   const handleEmployeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pin.length < 4) {
-      setEmpError('El PIN debe tener 4 dígitos.');
+    if (pin.length !== 4) {
+      setEmpError('El PIN debe tener exactamente 4 dígitos.');
       return;
     }
 
@@ -253,7 +253,7 @@ export const PortalPage: React.FC = () => {
                     )}
 
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-brand-subtext mb-2">PIN de 4 Dígitos</label>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-brand-subtext mb-2">PIN de 4 dígitos</label>
                       <div className="flex justify-center gap-2 mb-4">
                         {[0, 1, 2, 3].map((idx) => (
                           <div
@@ -312,7 +312,7 @@ export const PortalPage: React.FC = () => {
 
                   <button
                     type="submit"
-                    disabled={empLoading || pin.length < 4}
+                    disabled={empLoading || pin.length !== 4}
                     className="w-full bg-brand-maroon text-white font-bold py-3.5 rounded-xl hover:bg-brand-maroon/90 active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none shadow-md text-sm uppercase tracking-wider mt-4"
                   >
                     {empLoading ? 'Accediendo...' : 'Iniciar Sesión Empleado'}

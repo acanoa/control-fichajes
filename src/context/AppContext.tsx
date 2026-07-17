@@ -3,13 +3,11 @@ import {
   Company, WorkCenter, Profile, Employee, 
   AuthorizedDevice, TimeEntry, TimeEntryIncident, 
   CorrectionRequest, AuditLog, EntryType, 
-  TimeEntrySource, TimeEntryStatus, EmployeeWorkCenter
+  TimeEntrySource, TimeEntryStatus, EmployeeWorkCenter,
+  LaborCalendar, CalendarDayTypeSetting, CalendarDay,
+  CalendarImportRun, CalendarImportConflict, EmployeeWeeklyContract,
+  DailyWorkSummary, WeeklyWorkSummary, OvertimeAdjustment
 } from '../types';
-import { 
-  mockCompanies, mockWorkCenters, mockProfiles, 
-  mockEmployees, mockAuthorizedDevices, mockTimeEntries, 
-  mockTimeEntryIncidents, mockCorrectionRequests, mockAuditLogs 
-} from '../mockData';
 import { CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import { supabase } from '../services/supabase';
 
@@ -25,10 +23,34 @@ interface AppContextType {
   requests: CorrectionRequest[];
   auditLogs: AuditLog[];
   employeeWorkCenters: EmployeeWorkCenter[];
+  
+  // New Master Lists
+  laborCalendars: LaborCalendar[];
+  dayTypeSettings: CalendarDayTypeSetting[];
+  calendarDays: CalendarDay[];
+  calendarImportRuns: CalendarImportRun[];
+  calendarImportConflicts: CalendarImportConflict[];
+  employeeWeeklyContracts: EmployeeWeeklyContract[];
+  dailyWorkSummaries: DailyWorkSummary[];
+  weeklyWorkSummaries: WeeklyWorkSummary[];
+  overtimeAdjustments: OvertimeAdjustment[];
+
   setCompanies: React.Dispatch<React.SetStateAction<Company[]>>;
   setProfiles: React.Dispatch<React.SetStateAction<Profile[]>>;
   setTimeEntries: React.Dispatch<React.SetStateAction<TimeEntry[]>>;
   setEmployeeWorkCenters: React.Dispatch<React.SetStateAction<EmployeeWorkCenter[]>>;
+  
+  // New Setters
+  setLaborCalendars: React.Dispatch<React.SetStateAction<LaborCalendar[]>>;
+  setDayTypeSettings: React.Dispatch<React.SetStateAction<CalendarDayTypeSetting[]>>;
+  setCalendarDays: React.Dispatch<React.SetStateAction<CalendarDay[]>>;
+  setCalendarImportRuns: React.Dispatch<React.SetStateAction<CalendarImportRun[]>>;
+  setCalendarImportConflicts: React.Dispatch<React.SetStateAction<CalendarImportConflict[]>>;
+  setEmployeeWeeklyContracts: React.Dispatch<React.SetStateAction<EmployeeWeeklyContract[]>>;
+  setDailyWorkSummaries: React.Dispatch<React.SetStateAction<DailyWorkSummary[]>>;
+  setWeeklyWorkSummaries: React.Dispatch<React.SetStateAction<WeeklyWorkSummary[]>>;
+  setOvertimeAdjustments: React.Dispatch<React.SetStateAction<OvertimeAdjustment[]>>;
+  setAuditLogs: React.Dispatch<React.SetStateAction<AuditLog[]>>;
 
   // Session / Authentication States
   currentUser: {
@@ -40,6 +62,7 @@ interface AppContextType {
   currentWorkCenter?: WorkCenter;
   currentDevice?: AuthorizedDevice; // Device token stored in localStorage
   isDeviceAuthorized: boolean;
+  authLoading: boolean;
 
   // Actions
   authorizeDevice: (name: string, companyId: string, workCenterId: string, cameraWorking: boolean) => Promise<AuthorizedDevice>;
@@ -54,17 +77,29 @@ interface AppContextType {
   addEmployee: (emp: Omit<Employee, 'id' | 'employee_code' | 'employee_counter' | 'failed_pin_attempts' | 'created_at' | 'updated_at'>, allowedCenters?: string[]) => void;
   updateEmployee: (emp: Employee, allowedCenters?: string[]) => void;
   changeEmployeePin: (empId: string, newPin: string) => Promise<void>;
-  addWorkCenter: (companyId: string, name: string, address: string, lat?: number, lng?: number, radius?: number, status?: 'active' | 'inactive') => void;
+  addWorkCenter: (companyId: string, name: string, address: string, lat?: number, lng?: number, radius?: number, status?: 'active' | 'inactive', province?: string, municipality?: string) => void;
   updateWorkCenter: (center: WorkCenter) => void;
   deleteWorkCenter: (centerId: string) => Promise<void>;
   updateDevice: (device: AuthorizedDevice) => void;
   resolveIncident: (incidentId: string, justification: string) => void;
   resolveRequest: (reqId: string, status: 'approved' | 'rejected', responseText: string) => void;
-  submitRequest: (requestType: 'modify_existing' | 'create_missing', date: string, time: string, type: EntryType, reason: string, entryId?: string) => void;
+  submitRequest: (requestType: 'modify_existing' | 'create_missing', date: string, time: string, type: EntryType, reason: string, entryId?: string) => Promise<void>;
   deleteOldEntries: (companyId: string) => void;
   updateCompanySettings: (timeout: number) => void;
   showAlert: (message: string, type?: 'success' | 'error' | 'info', title?: string) => void;
   refreshData: () => Promise<void>;
+
+  // New Actions
+  recalculateEmployeeHours: (employeeId: string, companyId: string) => Promise<void>;
+  recalculateCompanyHours: (companyId: string) => Promise<void>;
+  addWeeklyContract: (contract: Omit<EmployeeWeeklyContract, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  updateWeeklyContract: (contract: EmployeeWeeklyContract) => Promise<void>;
+  deleteWeeklyContract: (contractId: string) => Promise<void>;
+  addLaborCalendar: (cal: Omit<LaborCalendar, 'id' | 'status' | 'created_at' | 'updated_at'>) => Promise<LaborCalendar>;
+  updateLaborCalendar: (cal: LaborCalendar) => Promise<void>;
+  importHolidays: (calendarId: string, province: string, municipality: string) => Promise<void>;
+  resolveConflict: (conflictId: string, resolution: 'keep_existing' | 'apply_imported' | 'merge_manually', manualDay?: Partial<CalendarDay>) => Promise<void>;
+  addOvertimeAdjustment: (weeklySummaryId: string, employeeId: string, minutes: number, reason: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -135,10 +170,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const { data: dbProfs } = await supabase.from('profiles').select('*');
       if (dbProfs) rawSetProfiles(dbProfs);
 
-      const { data: dbEmps } = await supabase.from('employees').select('*');
+      const { data: dbEmps } = await supabase
+        .from('employees')
+        .select('id, company_id, dni, full_name, employee_counter, employee_code, email, phone, job_title, department, hire_date, termination_date, status, created_at, updated_at');
       if (dbEmps) setEmployees(dbEmps);
 
-      const { data: dbDevs } = await supabase.from('authorized_devices').select('*');
+      const { data: dbDevs } = await supabase
+        .from('authorized_devices')
+        .select('id, company_id, work_center_id, name, status, camera_validation_status, camera_validated_at, camera_validation_error, camera_validated_by, registered_at, last_used_at, created_at, updated_at');
       if (dbDevs) setDevices(dbDevs);
 
       const { data: dbEntries } = await supabase.from('time_entries').select('*');
@@ -156,167 +195,102 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const { data: dbEwcs } = await supabase.from('employee_work_centers').select('*');
       if (dbEwcs) rawSetEmployeeWorkCenters(dbEwcs);
 
+      // Load new tables
+      const { data: dbCalendars } = await supabase.from('labor_calendars').select('*');
+      if (dbCalendars) rawSetLaborCalendars(dbCalendars);
+
+      const { data: dbDayTypes } = await supabase.from('calendar_day_type_settings').select('*');
+      if (dbDayTypes) rawSetDayTypeSettings(dbDayTypes);
+
+      const { data: dbCalendarDays } = await supabase.from('calendar_days').select('*');
+      if (dbCalendarDays) rawSetCalendarDays(dbCalendarDays);
+
+      const { data: dbImportRuns } = await supabase.from('calendar_import_runs').select('*');
+      if (dbImportRuns) rawSetCalendarImportRuns(dbImportRuns);
+
+      const { data: dbConflicts } = await supabase.from('calendar_import_conflicts').select('*');
+      if (dbConflicts) rawSetCalendarImportConflicts(dbConflicts);
+
+      const { data: dbWeeklyContracts } = await supabase.from('employee_weekly_contracts').select('*');
+      if (dbWeeklyContracts) rawSetEmployeeWeeklyContracts(dbWeeklyContracts);
+
+      const { data: dbDailySummaries } = await supabase.from('daily_work_summaries').select('*');
+      if (dbDailySummaries) rawSetDailyWorkSummaries(dbDailySummaries);
+
+      const { data: dbWeeklySummaries } = await supabase.from('weekly_work_summaries').select('*');
+      if (dbWeeklySummaries) rawSetWeeklyWorkSummaries(dbWeeklySummaries);
+
+      const { data: dbAdjustments } = await supabase.from('overtime_adjustments').select('*');
+      if (dbAdjustments) rawSetOvertimeAdjustments(dbAdjustments);
+
       console.log("Supabase database load/refresh completed successfully!");
     } catch (err) {
       console.warn("Could not load data from Supabase. Using localStorage fallback:", err);
     }
   };
 
-  // Sync with Supabase on mount (or auto-seed if database is empty)
-  useEffect(() => {
-    const initLoad = async () => {
-      try {
-        const { data: dbComps } = await supabase.from('companies').select('*');
-        if (dbComps && dbComps.length === 0) {
-          console.log("Supabase database is empty. Seeding with mock data...");
-          // Seed Companies
-          await supabase.from('companies').upsert(mockCompanies.map(c => ({
-            id: toUUID(c.id, '11111111'),
-            legal_name: c.legal_name,
-            commercial_name: c.commercial_name,
-            tax_id: c.tax_id,
-            company_code: c.company_code,
-            address: c.address,
-            email: c.email,
-            phone: c.phone,
-            status: c.status,
-            session_timeout_minutes: c.session_timeout_minutes
-          })));
-
-          // Seed Work Centers
-          await supabase.from('work_centers').upsert(mockWorkCenters.map(wc => ({
-            id: toUUID(wc.id, '22222222'),
-            company_id: toUUID(wc.company_id, '11111111'),
-            name: wc.name,
-            address: wc.address,
-            latitude: wc.latitude,
-            longitude: wc.longitude,
-            status: wc.status
-          })));
-
-          // Seed Profiles
-          await supabase.from('profiles').upsert(mockProfiles.map(p => ({
-            id: toUUID(p.id, '33333333'),
-            auth_user_id: p.auth_user_id,
-            full_name: p.full_name,
-            email: p.email,
-            role: p.role,
-            company_id: p.company_id ? toUUID(p.company_id, '11111111') : undefined,
-            status: p.status
-          })));
-
-          // Seed Employees (force 4 digits)
-          await supabase.from('employees').upsert(mockEmployees.map(emp => ({
-            id: toUUID(emp.id, '44444444'),
-            company_id: toUUID(emp.company_id, '11111111'),
-            dni: emp.dni,
-            full_name: emp.full_name,
-            employee_counter: emp.employee_counter,
-            employee_code: emp.employee_code.replace('ACM-0000', 'ACM-000').replace('BET-0000', 'BET-000'),
-            pin_hash: emp.pin_hash,
-            email: emp.email,
-            phone: emp.phone,
-            job_title: emp.job_title,
-            department: emp.department,
-            hire_date: emp.hire_date,
-            status: emp.status,
-            failed_pin_attempts: emp.failed_pin_attempts
-          })));
-
-          // Seed employee_work_centers mappings
-          const seededEwcs: any[] = [];
-          mockEmployees.forEach(emp => {
-            const empUUID = toUUID(emp.id, '44444444');
-            const compCenters = mockWorkCenters.filter(wc => wc.company_id === emp.company_id);
-            compCenters.forEach(wc => {
-              const wcUUID = toUUID(wc.id, '22222222');
-              seededEwcs.push({
-                employee_id: empUUID,
-                work_center_id: wcUUID
-              });
-            });
-          });
-          if (seededEwcs.length > 0) {
-            await supabase.from('employee_work_centers').upsert(seededEwcs);
-          }
-        }
-        
-        await refreshData();
-      } catch (err) {
-        console.warn("Could not seed data from Supabase. Falling back to local refresh:", err);
-        await refreshData();
-      }
-    };
-    initLoad();
-  }, []);
+  // Data is loaded only after Supabase has restored and verified an admin session.
+  // Production data must never be seeded by an anonymous browser.
 
   // Local DB States
   // Local DB States
   const [companies, rawSetCompanies] = useState<Company[]>(() => {
-    const saved = localStorage.getItem('cf_companies');
-    return saved ? JSON.parse(saved) : mockCompanies;
+    return [];
   });
   const [workCenters, setWorkCenters] = useState<WorkCenter[]>(() => {
-    const saved = localStorage.getItem('cf_work_centers');
-    return saved ? JSON.parse(saved) : mockWorkCenters;
+    return [];
   });
   const [profiles, rawSetProfiles] = useState<Profile[]>(() => {
-    const saved = localStorage.getItem('cf_profiles');
-    const list = saved ? JSON.parse(saved) : mockProfiles;
-    if (!list.some((p: any) => p.email === 'acano2@hotmail.com')) {
-      list.push({
-        id: 'prof-super-acanoa',
-        auth_user_id: '8ffbc810-8cde-4336-a6e2-1c82548f9b01',
-        full_name: 'Alberto Canoa',
-        email: 'acano2@hotmail.com',
-        role: 'superadmin',
-        status: 'active',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-    }
-    return list;
+    return [];
   });
+  const [laborCalendars, rawSetLaborCalendars] = useState<LaborCalendar[]>(() => {
+    return [];
+  });
+  const [dayTypeSettings, rawSetDayTypeSettings] = useState<CalendarDayTypeSetting[]>(() => {
+    return [];
+  });
+  const [calendarDays, rawSetCalendarDays] = useState<CalendarDay[]>(() => {
+    return [];
+  });
+  const [calendarImportRuns, rawSetCalendarImportRuns] = useState<CalendarImportRun[]>(() => {
+    return [];
+  });
+  const [calendarImportConflicts, rawSetCalendarImportConflicts] = useState<CalendarImportConflict[]>(() => {
+    return [];
+  });
+  const [employeeWeeklyContracts, rawSetEmployeeWeeklyContracts] = useState<EmployeeWeeklyContract[]>(() => {
+    return [];
+  });
+  const [dailyWorkSummaries, rawSetDailyWorkSummaries] = useState<DailyWorkSummary[]>(() => {
+    return [];
+  });
+  const [weeklyWorkSummaries, rawSetWeeklyWorkSummaries] = useState<WeeklyWorkSummary[]>(() => {
+    return [];
+  });
+  const [overtimeAdjustments, rawSetOvertimeAdjustments] = useState<OvertimeAdjustment[]>(() => {
+    return [];
+  });
+
   const [employees, setEmployees] = useState<Employee[]>(() => {
-    const saved = localStorage.getItem('cf_employees');
-    return saved ? JSON.parse(saved) : mockEmployees;
+    return [];
   });
   const [devices, setDevices] = useState<AuthorizedDevice[]>(() => {
-    const saved = localStorage.getItem('cf_devices');
-    return saved ? JSON.parse(saved) : mockAuthorizedDevices;
+    return [];
   });
   const [timeEntries, rawSetTimeEntries] = useState<TimeEntry[]>(() => {
-    const saved = localStorage.getItem('cf_time_entries');
-    return saved ? JSON.parse(saved) : mockTimeEntries;
+    return [];
   });
   const [incidents, setIncidents] = useState<TimeEntryIncident[]>(() => {
-    const saved = localStorage.getItem('cf_incidents');
-    return saved ? JSON.parse(saved) : mockTimeEntryIncidents;
+    return [];
   });
   const [requests, setRequests] = useState<CorrectionRequest[]>(() => {
-    const saved = localStorage.getItem('cf_requests');
-    return saved ? JSON.parse(saved) : mockCorrectionRequests;
+    return [];
   });
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    const saved = localStorage.getItem('cf_audit_logs');
-    return saved ? JSON.parse(saved) : mockAuditLogs;
+    return [];
   });
   const [employeeWorkCenters, rawSetEmployeeWorkCenters] = useState<EmployeeWorkCenter[]>(() => {
-    const saved = localStorage.getItem('cf_employee_work_centers');
-    if (saved) return JSON.parse(saved);
-    const list: EmployeeWorkCenter[] = [];
-    mockEmployees.forEach(emp => {
-      const compCenters = mockWorkCenters.filter(wc => wc.company_id === emp.company_id);
-      compCenters.forEach(wc => {
-        list.push({
-          id: `ewc-${emp.id}-${wc.id}`,
-          employee_id: emp.id,
-          work_center_id: wc.id,
-          created_at: new Date().toISOString()
-        });
-      });
-    });
-    return list;
+    return [];
   });
 
   // Custom Wrapped Setters for Supabase Sync & stable UUID conversions
@@ -432,128 +406,212 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const setLaborCalendars: React.Dispatch<React.SetStateAction<LaborCalendar[]>> = (value) => {
+    rawSetLaborCalendars(prev => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      const mapped = next.map(lc => ({
+        ...lc,
+        id: toUUID(lc.id, '88888888'),
+        company_id: toUUID(lc.company_id, '11111111'),
+        work_center_id: toUUID(lc.work_center_id, '22222222'),
+        reviewed_by: lc.reviewed_by ? toUUID(lc.reviewed_by, '33333333') : undefined,
+        activated_by: lc.activated_by ? toUUID(lc.activated_by, '33333333') : undefined
+      }));
+      supabase.from('labor_calendars').upsert(mapped).then(({ error }) => {
+        if (error) console.error("Error upserting labor_calendars:", error);
+      });
+      return mapped;
+    });
+  };
+
+  const setDayTypeSettings: React.Dispatch<React.SetStateAction<CalendarDayTypeSetting[]>> = (value) => {
+    rawSetDayTypeSettings(prev => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      const mapped = next.map(cdts => ({
+        ...cdts,
+        id: toUUID(cdts.id, '99999999'),
+        company_id: toUUID(cdts.company_id, '11111111')
+      }));
+      supabase.from('calendar_day_type_settings').upsert(mapped).then(({ error }) => {
+        if (error) console.error("Error upserting calendar_day_type_settings:", error);
+      });
+      return mapped;
+    });
+  };
+
+  const setCalendarDays: React.Dispatch<React.SetStateAction<CalendarDay[]>> = (value) => {
+    rawSetCalendarDays(prev => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      const mapped = next.map(cd => ({
+        ...cd,
+        id: toUUID(cd.id, 'aaaaaaaa'),
+        calendar_id: toUUID(cd.calendar_id, '88888888'),
+        day_type_setting_id: toUUID(cd.day_type_setting_id, '99999999'),
+        created_by: cd.created_by ? toUUID(cd.created_by, '33333333') : undefined,
+        updated_by: cd.updated_by ? toUUID(cd.updated_by, '33333333') : undefined
+      }));
+      supabase.from('calendar_days').upsert(mapped).then(({ error }) => {
+        if (error) console.error("Error upserting calendar_days:", error);
+      });
+      return mapped;
+    });
+  };
+
+  const setCalendarImportRuns: React.Dispatch<React.SetStateAction<CalendarImportRun[]>> = (value) => {
+    rawSetCalendarImportRuns(prev => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      const mapped = next.map(cir => ({
+        ...cir,
+        id: toUUID(cir.id, 'bbbbbbbb'),
+        calendar_id: toUUID(cir.calendar_id, '88888888'),
+        requested_by: cir.requested_by ? toUUID(cir.requested_by, '33333333') : undefined
+      }));
+      supabase.from('calendar_import_runs').upsert(mapped).then(({ error }) => {
+        if (error) console.error("Error upserting calendar_import_runs:", error);
+      });
+      return mapped;
+    });
+  };
+
+  const setCalendarImportConflicts: React.Dispatch<React.SetStateAction<CalendarImportConflict[]>> = (value) => {
+    rawSetCalendarImportConflicts(prev => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      const mapped = next.map(cic => ({
+        ...cic,
+        id: toUUID(cic.id, 'cccccccc'),
+        import_run_id: toUUID(cic.import_run_id, 'bbbbbbbb'),
+        calendar_id: toUUID(cic.calendar_id, '88888888'),
+        resolved_by: cic.resolved_by ? toUUID(cic.resolved_by, '33333333') : undefined
+      }));
+      supabase.from('calendar_import_conflicts').upsert(mapped).then(({ error }) => {
+        if (error) console.error("Error upserting calendar_import_conflicts:", error);
+      });
+      return mapped;
+    });
+  };
+
+  const setEmployeeWeeklyContracts: React.Dispatch<React.SetStateAction<EmployeeWeeklyContract[]>> = (value) => {
+    rawSetEmployeeWeeklyContracts(prev => {
+      return typeof value === 'function' ? value(prev) : value;
+    });
+  };
+
+  const setDailyWorkSummaries: React.Dispatch<React.SetStateAction<DailyWorkSummary[]>> = (value) => {
+    rawSetDailyWorkSummaries(prev => {
+      return typeof value === 'function' ? value(prev) : value;
+    });
+  };
+
+  const setWeeklyWorkSummaries: React.Dispatch<React.SetStateAction<WeeklyWorkSummary[]>> = (value) => {
+    rawSetWeeklyWorkSummaries(prev => {
+      return typeof value === 'function' ? value(prev) : value;
+    });
+  };
+
+  const setOvertimeAdjustments: React.Dispatch<React.SetStateAction<OvertimeAdjustment[]>> = (value) => {
+    rawSetOvertimeAdjustments(prev => {
+      return typeof value === 'function' ? value(prev) : value;
+    });
+  };
+
   // Session States
-  const [currentUser, setCurrentUser] = useState<AppContextType['currentUser']>(() => {
-    const saved = sessionStorage.getItem('cf_current_user');
-    return saved ? JSON.parse(saved) : { role: 'none' };
-  });
-
-  const [currentCompany, setCurrentCompany] = useState<Company | undefined>(() => {
-    const saved = sessionStorage.getItem('cf_current_company');
-    return saved ? JSON.parse(saved) : undefined;
-  });
-
-  const [currentWorkCenter, setCurrentWorkCenter] = useState<WorkCenter | undefined>(() => {
-    const saved = sessionStorage.getItem('cf_current_work_center');
-    return saved ? JSON.parse(saved) : undefined;
-  });
-
-  const [currentDevice, setCurrentDevice] = useState<AuthorizedDevice | undefined>(() => {
-    const activeToken = localStorage.getItem('cf_device_token');
-    if (!activeToken) return undefined;
-    const savedDevices: AuthorizedDevice[] = JSON.parse(localStorage.getItem('cf_devices') || '[]');
-    return (savedDevices.length ? savedDevices : mockAuthorizedDevices).find(d => d.device_token === activeToken);
-  });
+  const [currentUser, setCurrentUser] = useState<AppContextType['currentUser']>({ role: 'none' });
+  const [currentCompany, setCurrentCompany] = useState<Company | undefined>();
+  const [currentWorkCenter, setCurrentWorkCenter] = useState<WorkCenter | undefined>();
+  const [currentDevice, setCurrentDevice] = useState<AuthorizedDevice | undefined>();
+  const [employeeSessionToken, setEmployeeSessionToken] = useState<string>();
+  const [authLoading, setAuthLoading] = useState(true);
 
   const isDeviceAuthorized = !!currentDevice && currentDevice.status === 'active' && currentDevice.camera_validation_status === 'validated';
 
-  // Sync state to local storage when changed
+  // Remove data left by older insecure versions. Only the opaque terminal token may persist.
   useEffect(() => {
-    localStorage.setItem('cf_companies', JSON.stringify(companies));
-  }, [companies]);
-  useEffect(() => {
-    localStorage.setItem('cf_work_centers', JSON.stringify(workCenters));
-  }, [workCenters]);
-  useEffect(() => {
-    localStorage.setItem('cf_profiles', JSON.stringify(profiles));
-  }, [profiles]);
-  useEffect(() => {
-    localStorage.setItem('cf_employees', JSON.stringify(employees));
-  }, [employees]);
+    Object.keys(localStorage).filter(key => key.startsWith('cf_') && key !== 'cf_device_token').forEach(key => localStorage.removeItem(key));
+    sessionStorage.removeItem('cf_current_user');
+    sessionStorage.removeItem('cf_current_company');
+    sessionStorage.removeItem('cf_current_work_center');
+  }, []);
 
-  // Migration check for 5-digit employee codes to 4-digit codes in localStorage
   useEffect(() => {
-    const hasFiveDigits = employees.some(emp => /^[A-Z0-9]+-\d{5}$/.test(emp.employee_code));
-    if (hasFiveDigits) {
-      const migrated = employees.map(emp => {
-        const match = emp.employee_code.match(/^([A-Z0-9]+)-(\d{5})$/);
-        if (match) {
-          const prefix = match[1];
-          const num = match[2];
-          const newNum = num.substring(1); // convert "00001" to "0001"
-          return {
-            ...emp,
-            employee_code: `${prefix}-${newNum}`
-          };
-        }
-        return emp;
-      });
-      setEmployees(migrated);
-    }
-  }, [employees]);
-  useEffect(() => {
-    localStorage.setItem('cf_devices', JSON.stringify(devices));
-  }, [devices]);
-  useEffect(() => {
-    localStorage.setItem('cf_time_entries', JSON.stringify(timeEntries));
-  }, [timeEntries]);
-  useEffect(() => {
-    localStorage.setItem('cf_incidents', JSON.stringify(incidents));
-  }, [incidents]);
-  useEffect(() => {
-    localStorage.setItem('cf_employee_work_centers', JSON.stringify(employeeWorkCenters));
-  }, [employeeWorkCenters]);
-  useEffect(() => {
-    localStorage.setItem('cf_requests', JSON.stringify(requests));
-  }, [requests]);
-  useEffect(() => {
-    localStorage.setItem('cf_audit_logs', JSON.stringify(auditLogs));
-  }, [auditLogs]);
+    let active = true;
 
-  // Sync session states
-  useEffect(() => {
-    sessionStorage.setItem('cf_current_user', JSON.stringify(currentUser));
-  }, [currentUser]);
-  useEffect(() => {
-    if (currentCompany) sessionStorage.setItem('cf_current_company', JSON.stringify(currentCompany));
-    else sessionStorage.removeItem('cf_current_company');
-  }, [currentCompany]);
-  useEffect(() => {
-    if (currentWorkCenter) sessionStorage.setItem('cf_current_work_center', JSON.stringify(currentWorkCenter));
-    else sessionStorage.removeItem('cf_current_work_center');
-  }, [currentWorkCenter]);
+    const restoreAdminSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!active || !session) return;
+
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('auth_user_id', session.user.id)
+        .eq('status', 'active')
+        .single();
+
+      if (error || !profile) {
+        await supabase.auth.signOut();
+        return;
+      }
+
+      setCurrentUser({ role: profile.role, profile });
+      await refreshData();
+      if (profile.company_id) {
+        const { data: company } = await supabase.from('companies').select('*').eq('id', profile.company_id).single();
+        setCurrentCompany(company || undefined);
+      }
+    };
+
+    const validateTerminal = async () => {
+      const token = localStorage.getItem('cf_device_token');
+      if (!token) return;
+      const { data, error } = await supabase.rpc('validate_device', { p_device_token: token });
+      if (error || !data) {
+        localStorage.removeItem('cf_device_token');
+        return;
+      }
+      setCurrentDevice(data as AuthorizedDevice);
+    };
+
+    const loadPublicRegistrationOptions = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) return;
+      const { data, error } = await supabase.rpc('list_device_registration_options');
+      if (error || !data) return;
+      if (active) {
+        rawSetCompanies((data.companies || []) as Company[]);
+        setWorkCenters((data.work_centers || []) as WorkCenter[]);
+      }
+    };
+
+    Promise.all([restoreAdminSession(), validateTerminal(), loadPublicRegistrationOptions()])
+      .catch(error => console.error('Error restaurando la sesión segura:', error))
+      .finally(() => active && setAuthLoading(false));
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        setCurrentUser({ role: 'none' });
+        setCurrentCompany(undefined);
+      }
+    });
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
 
   // Actions
   const authorizeDevice = async (name: string, companyId: string, workCenterId: string, cameraWorking: boolean): Promise<AuthorizedDevice> => {
-    const token = safeUUID();
-    const newDevice: AuthorizedDevice = {
-      id: safeUUID(),
-      company_id: companyId,
-      work_center_id: workCenterId,
-      name,
-      device_token: token,
-      status: cameraWorking ? 'active' : 'pending',
-      camera_validation_status: cameraWorking ? 'validated' : 'failed',
-      camera_validated_at: cameraWorking ? new Date().toISOString() : undefined,
-      camera_validated_by: currentUser.profile?.id,
-      registered_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    setDevices(prev => [...prev, newDevice]);
-    
-    // Insert into Supabase
-    supabase.from('authorized_devices').insert(newDevice).then(({ error }) => {
-      if (error) console.error("Error inserting device into Supabase:", error);
+    const { data, error } = await supabase.rpc('request_device_registration', {
+      p_name: name.trim(),
+      p_company_id: companyId,
+      p_work_center_id: workCenterId,
+      p_camera_working: cameraWorking
     });
-    
-    // Auto authorize on local device
-    if (cameraWorking) {
-      localStorage.setItem('cf_device_token', token);
-      setCurrentDevice(newDevice);
+    if (error || !data?.device || !data?.device_token) {
+      throw new Error(error?.message || 'No se pudo registrar la solicitud del terminal.');
     }
-    return newDevice;
+    localStorage.setItem('cf_device_token', data.device_token);
+    setCurrentDevice(data.device as AuthorizedDevice);
+    return data.device as AuthorizedDevice;
   };
 
   const deauthorizeDevice = (deviceId: string) => {
@@ -589,10 +647,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const loginEmployee = async (pin: string): Promise<Employee> => {
-    if (!currentDevice) {
+    const deviceToken = localStorage.getItem('cf_device_token');
+    if (!currentDevice || !deviceToken) {
       throw new Error('Terminal no autorizado.');
     }
 
+    const { data, error } = await supabase.rpc('authenticate_employee', {
+      p_device_token: deviceToken,
+      p_pin: pin
+    });
+    if (error || !data?.employee || !data?.employee_session_token) {
+      throw new Error(error?.message || 'Credenciales de empleado incorrectas.');
+    }
+
+    const authenticatedEmployee = data.employee as Employee;
+    setEmployeeSessionToken(data.employee_session_token);
+    setCurrentUser({ role: 'employee', employee: authenticatedEmployee });
+    setCurrentCompany(data.company as Company);
+    setCurrentWorkCenter(data.work_center as WorkCenter);
+    setTimeEntries((data.time_entries || []) as TimeEntry[]);
+    setRequests((data.correction_requests || []) as CorrectionRequest[]);
+    return authenticatedEmployee;
+
+    /*
+     * Legacy client-side PIN flow deliberately disabled. Authentication is performed
+     * atomically by authenticate_employee and no PIN digest is ever downloaded.
+     */
+    /*
     const deviceCompanyId = currentDevice.company_id;
     const deviceWorkCenterId = currentDevice.work_center_id;
 
@@ -651,6 +732,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentWorkCenter(wc);
 
     return emp;
+    */
   };
 
   const loginAdmin = async (email: string, pass: string): Promise<Profile> => {
@@ -659,68 +741,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         email: email.trim().toLowerCase(),
         password: pass
       });
+      if (authError || !authData.user) {
+        throw new Error('Credenciales de administrador incorrectas.');
+      }
 
       if (!authError && authData.user) {
-        // Query the profiles table in Supabase
-        const { data: dbProfile } = await supabase
+        const { data: dbProfile, error: profileError } = await supabase
           .from('profiles')
           .select('*')
           .eq('auth_user_id', authData.user.id)
+          .eq('status', 'active')
           .single();
 
-        if (dbProfile) {
-          if (dbProfile.status === 'blocked') {
-            await supabase.auth.signOut();
-            throw new Error('Su cuenta administrativa está bloqueada.');
-          }
-          setCurrentUser({
-            role: dbProfile.role,
-            profile: dbProfile
-          });
-          if (dbProfile.company_id) {
-            const company = companies.find(c => c.id === dbProfile.company_id);
-            setCurrentCompany(company);
-          }
-          return dbProfile;
+        if (profileError || !dbProfile) {
+          await supabase.auth.signOut();
+          throw new Error('La cuenta no tiene un perfil administrativo activo.');
         }
+
+        if (dbProfile.role !== 'company_admin' && dbProfile.role !== 'superadmin') {
+          await supabase.auth.signOut();
+          throw new Error('La cuenta no tiene permisos administrativos.');
+        }
+
+        let company: Company | undefined;
+        if (dbProfile.role === 'company_admin') {
+          if (!dbProfile.company_id) {
+            await supabase.auth.signOut();
+            throw new Error('El perfil administrativo no tiene una empresa asignada.');
+          }
+
+          const { data: dbCompany, error: companyError } = await supabase
+            .from('companies')
+            .select('*')
+            .eq('id', dbProfile.company_id)
+            .single();
+
+          if (companyError || !dbCompany) {
+            await supabase.auth.signOut();
+            throw new Error('No se pudo cargar la empresa asignada al administrador.');
+          }
+          company = dbCompany as Company;
+        }
+
+        await refreshData();
+        setCurrentCompany(company);
+        setCurrentUser({
+          role: dbProfile.role,
+          profile: dbProfile
+        });
+        return dbProfile;
       }
     } catch (e: any) {
-      if (e.message && e.message.includes('bloqueada')) throw e;
-      console.warn("Supabase Auth login failed, falling back to local credentials:", e);
+      await supabase.auth.signOut();
+      throw new Error(e?.message || 'Credenciales de administrador incorrectas.');
     }
 
-    // Normal mock authentication fallback
-    const prof = profiles.find(p => p.email.toLowerCase() === email.trim().toLowerCase());
-    if (!prof) {
-      throw new Error('Credenciales de administrador incorrectas.');
-    }
-
-    if (prof.status === 'blocked') {
-      throw new Error('Su cuenta administrativa está bloqueada.');
-    }
-
-    if (pass.length < 4) {
-      throw new Error('La contraseña debe tener al menos 4 caracteres.');
-    }
-
-    setCurrentUser({
-      role: prof.role,
-      profile: prof
-    });
-
-    if (prof.company_id) {
-      const company = companies.find(c => c.id === prof.company_id);
-      setCurrentCompany(company);
-    }
-
-    return prof;
+    await supabase.auth.signOut();
+    throw new Error('La cuenta no tiene un perfil administrativo activo.');
   };
 
   const logout = () => {
+    if (currentUser.role !== 'employee') {
+      void supabase.auth.signOut();
+    }
     setCurrentUser({ role: 'none' });
     setCurrentCompany(undefined);
     setCurrentWorkCenter(undefined);
-    sessionStorage.clear();
+    setEmployeeSessionToken(undefined);
   };
 
   const registerPunch = async (
@@ -732,13 +819,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     gpsError?: string,
     manualReason?: string
   ): Promise<TimeEntry> => {
-    if (currentUser.role !== 'employee' || !currentUser.employee || !currentCompany || !currentWorkCenter) {
+    const deviceToken = localStorage.getItem('cf_device_token');
+    if (currentUser.role !== 'employee' || !currentUser.employee || !currentCompany || !currentWorkCenter || !employeeSessionToken || !deviceToken) {
       throw new Error('Sesión de empleado inválida.');
     }
 
-    const emp = currentUser.employee;
+    if (photoBase64 && photoBase64.length > 2_800_000) {
+      throw new Error('La fotografía supera el tamaño máximo permitido.');
+    }
+    const { data, error } = await supabase.rpc('register_time_entry', {
+      p_employee_session_token: employeeSessionToken,
+      p_device_token: deviceToken,
+      p_entry_type: type,
+      p_photo_data: photoBase64,
+      p_latitude: lat ?? null,
+      p_longitude: lng ?? null,
+      p_camera_error: cameraError ?? null,
+      p_gps_error: gpsError ?? null,
+      p_manual_reason: manualReason?.trim() || null
+    });
+    if (error || !data) {
+      throw new Error(error?.message || 'No se pudo registrar el fichaje.');
+    }
+    const securedEntry = data as TimeEntry;
+    setTimeEntries(prev => [...prev, securedEntry]);
+    window.setTimeout(logout, 2000);
+    return securedEntry;
 
-    // Check Sequence Validity in Mock
+    /*
+    Legacy client-side entry creation is intentionally disabled.
     const todayStr = new Date().toISOString().split('T')[0];
     const todayEntries = timeEntries
       .filter(t => t.employee_id === emp.id && t.status === 'active' && t.registered_at.startsWith(todayStr))
@@ -840,6 +949,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 2000);
 
     return newEntry;
+    */
   };
 
   const addEmployee = (
@@ -895,7 +1005,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       entity_type: 'employees',
       entity_id: newEmp.id,
       action: 'create',
-      new_values: newEmp,
+      new_values: { ...newEmp, pin_hash: undefined },
       reason: 'Alta de nuevo empleado en el sistema',
       performed_by: currentUser.profile?.id,
       performed_at: new Date().toISOString()
@@ -952,19 +1062,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const changeEmployeePin = async (empId: string, newPin: string): Promise<void> => {
-    const pinExists = employees.some(e => e.pin_hash === newPin && e.id !== empId && e.status === 'active');
-    if (pinExists) {
-      throw new Error('Este PIN ya está en uso por otro empleado en la plataforma. Elija otro.');
-    }
-
-    setEmployees(prev => prev.map(e => e.id === empId ? { ...e, pin_hash: newPin, updated_at: new Date().toISOString() } : e));
-
-    supabase.from('employees').update({
-      pin_hash: newPin,
-      updated_at: new Date().toISOString()
-    }).eq('id', empId).then(({ error }) => {
-      if (error) console.error("Error updating PIN in Supabase:", error);
+    const { error } = await supabase.rpc('set_employee_pin', {
+      p_employee_id: empId,
+      p_new_pin: newPin
     });
+    if (error) throw new Error(error.message || 'No se pudo actualizar el PIN.');
 
     const emp = employees.find(e => e.id === empId);
     if (emp) {
@@ -983,7 +1085,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addWorkCenter = (companyId: string, name: string, address: string, lat?: number, lng?: number, radius?: number, status?: 'active' | 'inactive') => {
+  const addWorkCenter = (companyId: string, name: string, address: string, lat?: number, lng?: number, radius?: number, status?: 'active' | 'inactive', province?: string, municipality?: string) => {
     const newCenter: WorkCenter = {
       id: safeUUID(),
       company_id: companyId,
@@ -991,7 +1093,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       address,
       latitude: lat,
       longitude: lng,
+      country: 'España',
+      country_code: 'ESP',
       status: status || 'active',
+      province,
+      municipality,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -1188,16 +1294,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const submitRequest = (
+  const submitRequest = async (
     requestType: 'modify_existing' | 'create_missing', 
     date: string, 
     time: string, 
     type: EntryType, 
     reason: string, 
     entryId?: string
-  ) => {
-    if (currentUser.role !== 'employee' || !currentUser.employee || !currentCompany) return;
+  ): Promise<void> => {
+    const deviceToken = localStorage.getItem('cf_device_token');
+    if (currentUser.role !== 'employee' || !currentUser.employee || !currentCompany || !employeeSessionToken || !deviceToken) {
+      throw new Error('Sesión de empleado inválida.');
+    }
 
+    const { data, error } = await supabase.rpc('submit_correction_request', {
+      p_employee_session_token: employeeSessionToken,
+      p_device_token: deviceToken,
+      p_request_type: requestType,
+      p_requested_date: date,
+      p_requested_time: `${time}:00`,
+      p_entry_type: type,
+      p_reason: reason.trim(),
+      p_time_entry_id: entryId || null
+    });
+    if (error || !data) {
+      throw new Error(error?.message || 'No se pudo registrar la solicitud.');
+    }
+    setRequests(prev => [data as CorrectionRequest, ...prev]);
+    return;
+
+    /*
+    Legacy direct insert disabled.
     const newReq: CorrectionRequest = {
       id: safeUUID(),
       company_id: currentCompany.id,
@@ -1216,6 +1343,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     supabase.from('correction_requests').insert(newReq).then(({ error }) => {
       if (error) console.error("Error submitting correction request:", error);
     });
+    */
   };
 
   const deleteOldEntries = (companyId: string) => {
@@ -1280,14 +1408,842 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     supabase.from('audit_logs').insert(log).then();
   };
 
+  // ==========================================
+  // NEW SYSTEM ACTIONS: CALENDARS & OVERTIME
+  // ==========================================
+
+  // 1. Core Recalculation Engine
+  const recalculateEmployeeHours = async (employeeId: string, companyId: string): Promise<void> => {
+    try {
+      const employee = employees.find(item => item.id === employeeId);
+      if (!employee || employee.company_id !== companyId) {
+        throw new Error('Empleado o empresa no válidos.');
+      }
+      const { data, error } = await supabase.rpc('recalculate_employee_hours', {
+        p_employee_id: employeeId
+      });
+      if (error || !data) {
+        throw new Error(error?.message || 'No se pudo recalcular la jornada.');
+      }
+      rawSetDailyWorkSummaries(prev => [
+        ...prev.filter(summary => summary.employee_id !== employeeId),
+        ...((data.daily || []) as DailyWorkSummary[])
+      ]);
+      rawSetWeeklyWorkSummaries(prev => [
+        ...prev.filter(summary => summary.employee_id !== employeeId),
+        ...((data.weekly || []) as WeeklyWorkSummary[])
+      ]);
+      return;
+      
+      /*
+      Legacy browser calculation disabled. PostgreSQL is the sole authority.
+      // Fetch all active time entries of employee
+      const empEntries = timeEntries
+        .filter(t => t.employee_id === employeeId && t.status === 'active')
+        .sort((a, b) => new Date(a.registered_at).getTime() - new Date(b.registered_at).getTime());
+
+      // Group entries by date (YYYY-MM-DD)
+      const entriesByDate: Record<string, TimeEntry[]> = {};
+      empEntries.forEach(entry => {
+        const dateStr = entry.registered_at.split('T')[0];
+        if (!entriesByDate[dateStr]) entriesByDate[dateStr] = [];
+        entriesByDate[dateStr].push(entry);
+      });
+
+      const computedDailySummaries: DailyWorkSummary[] = [];
+
+      // Calculate each day
+      Object.keys(entriesByDate).forEach(dateStr => {
+        const dayPunches = entriesByDate[dateStr];
+        
+        // Find which work center is active for this day's first punch
+        const firstPunch = dayPunches[0];
+        const wcId = firstPunch?.work_center_id || 'unknown';
+
+        // Find active calendar for this work center and year
+        const year = new Date(dateStr).getFullYear();
+        const activeCal = laborCalendars.find(c => c.work_center_id === wcId && c.year === year && c.status === 'active');
+        const calId = activeCal?.id;
+
+        // Resolve day type
+        let dayTypeSetting: CalendarDayTypeSetting | undefined;
+        let dayName = 'Laborable Normal';
+        let classification = 'working_day';
+        let calendarDayId: string | undefined;
+
+        if (calId) {
+          const calDay = calendarDays.find(d => d.calendar_id === calId && d.date === dateStr);
+          if (calDay) {
+            calendarDayId = calDay.id;
+            dayName = calDay.name;
+            classification = calDay.classification;
+            dayTypeSetting = dayTypeSettings.find(s => s.id === calDay.day_type_setting_id);
+          }
+        }
+
+        // If no calendar day is set, fall back to defaults
+        const dateObj = new Date(dateStr);
+        const dayOfWeek = dateObj.getDay(); // 0 is Sunday, 6 is Saturday
+
+        if (!dayTypeSetting) {
+          if (dayOfWeek === 0) {
+            // Sunday fallback
+            dayTypeSetting = dayTypeSettings.find(s => s.company_id === companyId && s.classification === 'sunday');
+            dayName = 'Domingo / Descanso Semanal';
+            classification = 'sunday';
+          } else if (dayOfWeek === 6 && activeCal?.working_week_model === 'monday_to_friday') {
+            // Saturday is non-working day under L-V
+            dayTypeSetting = dayTypeSettings.find(s => s.company_id === companyId && s.classification === 'sunday');
+            dayName = 'Sábado (No Laborable)';
+            classification = 'sunday';
+          } else {
+            // Standard working day
+            dayTypeSetting = dayTypeSettings.find(s => s.company_id === companyId && s.classification === 'working_day');
+          }
+        }
+
+        // Check worked minutes & breaks
+        let rawWorkedMinutes = 0;
+        let breakMinutes = 0;
+        let isComplete = true;
+
+        // Simple pairing of Entry and Exit, discounting breaks
+        // Sort entries by time
+        const sorted = [...dayPunches].sort((a, b) => new Date(a.registered_at).getTime() - new Date(b.registered_at).getTime());
+        
+        let lastEntryTime: number | null = null;
+        let lastBreakStartTime: number | null = null;
+
+        for (let i = 0; i < sorted.length; i++) {
+          const p = sorted[i];
+          const t = new Date(p.registered_at).getTime();
+
+          if (p.entry_type === 'entry') {
+            lastEntryTime = t;
+          } else if (p.entry_type === 'break_start') {
+            lastBreakStartTime = t;
+            if (lastEntryTime !== null) {
+              rawWorkedMinutes += Math.round((t - lastEntryTime) / 60000);
+              lastEntryTime = null;
+            }
+          } else if (p.entry_type === 'break_end') {
+            if (lastBreakStartTime !== null) {
+              breakMinutes += Math.round((t - lastBreakStartTime) / 60000);
+              lastBreakStartTime = null;
+            }
+            lastEntryTime = t;
+          } else if (p.entry_type === 'exit') {
+            if (lastEntryTime !== null) {
+              rawWorkedMinutes += Math.round((t - lastEntryTime) / 60000);
+              lastEntryTime = null;
+            }
+          }
+        }
+
+        // If shift is still open (last punch is entry or break_end and no exit yet)
+        const lastPunch = sorted[sorted.length - 1];
+        if (lastPunch && (lastPunch.entry_type === 'entry' || lastPunch.entry_type === 'break_end')) {
+          isComplete = false; // Provisional
+        }
+        if (lastPunch && lastPunch.entry_type === 'break_start') {
+          isComplete = false; // Provisional inside break
+        }
+
+        // Apply rounding: intervals of 15 min downwards, only if complete
+        let roundedWorkedMinutes = rawWorkedMinutes;
+        if (isComplete) {
+          roundedWorkedMinutes = Math.floor(rawWorkedMinutes / 15) * 15;
+        }
+
+        const multiplier = dayTypeSetting?.work_multiplier || 1.0;
+        
+        // Double effect check: if it is a holiday under the model and worked
+        // We apply the work multiplier to get weighted minutes
+        const weightedMinutes = Math.round(roundedWorkedMinutes * multiplier);
+        const hasIncident = dayPunches.some(p => p.has_incident);
+
+        const summaryId = toUUID(`dws-${employeeId}-${dateStr}`, 'eeeeeeee');
+
+        computedDailySummaries.push({
+          id: summaryId,
+          company_id: companyId,
+          employee_id: employeeId,
+          work_center_id: wcId !== 'unknown' ? wcId : undefined,
+          work_date: dateStr,
+          calendar_id: calId,
+          calendar_day_id: calendarDayId,
+          raw_worked_minutes: rawWorkedMinutes,
+          break_minutes: breakMinutes,
+          rounded_worked_minutes: roundedWorkedMinutes,
+          effective_multiplier: multiplier,
+          weighted_minutes: weightedMinutes,
+          is_complete: isComplete,
+          has_incident: hasIncident,
+          calculated_at: new Date().toISOString(),
+          calculation_version: 1
+        });
+      });
+
+      // Update state for daily summaries (replaces matching employee summaries)
+      rawSetDailyWorkSummaries(prev => {
+        const otherDaily = prev.filter(s => s.employee_id !== employeeId);
+        return [...otherDaily, ...computedDailySummaries];
+      });
+
+      // Group daily summaries by week (Monday to Sunday)
+      const weeklyGroups: Record<string, DailyWorkSummary[]> = {};
+      computedDailySummaries.forEach(dws => {
+        // Find Monday of that week
+        const d = new Date(dws.work_date);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+        const monday = new Date(d.setDate(diff));
+        const mondayStr = monday.toISOString().split('T')[0];
+        
+        if (!weeklyGroups[mondayStr]) weeklyGroups[mondayStr] = [];
+        weeklyGroups[mondayStr].push(dws);
+      });
+
+      const computedWeeklySummaries: WeeklyWorkSummary[] = [];
+
+      Object.keys(weeklyGroups).forEach(mondayStr => {
+        const weekDays = weeklyGroups[mondayStr];
+        const weekStart = mondayStr;
+        const monDate = new Date(mondayStr);
+        const sunDate = new Date(monDate);
+        sunDate.setDate(monDate.getDate() + 6);
+        const weekEnd = sunDate.toISOString().split('T')[0];
+
+        // Find weekly contract active for this week
+        const activeContract = employeeWeeklyContracts
+          .filter(c => c.employee_id === employeeId && c.effective_from <= weekStart)
+          .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0];
+
+        const contractedWeeklyMinutes = activeContract?.weekly_minutes || 2400; // 40h default
+
+        // Divisor of calendar: Monday to Friday (5) or Saturday (6)
+        // Find center and calendar model from the first day summary in the week
+        const firstDay = weekDays[0];
+        const activeCal = laborCalendars.find(c => c.id === firstDay?.calendar_id);
+        const workingDaysDivisor = activeCal?.working_week_model === 'monday_to_saturday' ? 6 : 5;
+        const referenceDailyMinutes = Math.round(contractedWeeklyMinutes / workingDaysDivisor);
+
+        let targetReductionMinutes = 0;
+        let specialTargetAdjustmentMinutes = 0;
+
+        // Loop through each day of this week to compute reductions
+        for (let i = 0; i < 7; i++) {
+          const currentDayDate = new Date(monDate);
+          currentDayDate.setDate(monDate.getDate() + i);
+          const currentDayStr = currentDayDate.toISOString().split('T')[0];
+          const currentDayOfWeek = currentDayDate.getDay(); // 0 Sunday, 6 Saturday
+
+          // Find if there is a calendar day
+          const calDay = calendarDays.find(d => d.calendar_id === activeCal?.id && d.date === currentDayStr);
+          let setting: CalendarDayTypeSetting | undefined;
+          
+          if (calDay) {
+            setting = dayTypeSettings.find(s => s.id === calDay.day_type_setting_id);
+          } else if (currentDayOfWeek === 0) {
+            setting = dayTypeSettings.find(s => s.company_id === companyId && s.classification === 'sunday');
+          }
+
+          if (setting) {
+            // If setting reduces weekly target
+            if (setting.reduces_weekly_target) {
+              // Only reduces target if it falls on a working day according to the model
+              const isWorkingDayInModel = workingDaysDivisor === 6 
+                ? (currentDayOfWeek >= 1 && currentDayOfWeek <= 6) // Mon to Sat
+                : (currentDayOfWeek >= 1 && currentDayOfWeek <= 5); // Mon to Fri
+              
+              if (isWorkingDayInModel) {
+                targetReductionMinutes += referenceDailyMinutes;
+              }
+            }
+
+            // Special target hours (reduced workdays)
+            if (setting.special_target_minutes !== undefined && setting.special_target_minutes !== null) {
+              const isWorkingDayInModel = workingDaysDivisor === 6 
+                ? (currentDayOfWeek >= 1 && currentDayOfWeek <= 6)
+                : (currentDayOfWeek >= 1 && currentDayOfWeek <= 5);
+              
+              if (isWorkingDayInModel) {
+                specialTargetAdjustmentMinutes += (referenceDailyMinutes - setting.special_target_minutes);
+              }
+            }
+          }
+        }
+
+        const adjustedTargetMinutes = Math.max(0, contractedWeeklyMinutes - targetReductionMinutes - specialTargetAdjustmentMinutes);
+
+        // Sum worked actual & weighted
+        let actualWorkedMinutes = 0;
+        let weightedWorkedMinutes = 0;
+        let hasIncompleteDays = false;
+
+        weekDays.forEach(dws => {
+          actualWorkedMinutes += dws.rounded_worked_minutes;
+          weightedWorkedMinutes += dws.weighted_minutes;
+          if (!dws.is_complete) hasIncompleteDays = true;
+        });
+
+        const automaticOvertimeMinutes = Math.max(0, weightedWorkedMinutes - adjustedTargetMinutes);
+
+        // Fetch manual adjustments
+        const weekSummaryId = toUUID(`wws-${employeeId}-${weekStart}`, 'ffffffff');
+        const weekAdjustments = overtimeAdjustments.filter(a => a.weekly_summary_id === weekSummaryId && !a.cancelled_at);
+        const manualAdjustmentMinutes = weekAdjustments.reduce((sum, adj) => sum + adj.adjustment_minutes, 0);
+        const finalOvertimeMinutes = Math.max(0, automaticOvertimeMinutes + manualAdjustmentMinutes);
+
+        computedWeeklySummaries.push({
+          id: weekSummaryId,
+          company_id: companyId,
+          employee_id: employeeId,
+          week_start: weekStart,
+          week_end: weekEnd,
+          contracted_weekly_minutes: contractedWeeklyMinutes,
+          working_days_divisor: workingDaysDivisor,
+          reference_daily_minutes: referenceDailyMinutes,
+          target_reduction_minutes: targetReductionMinutes,
+          special_target_adjustment_minutes: specialTargetAdjustmentMinutes,
+          adjusted_target_minutes: adjustedTargetMinutes,
+          actual_worked_minutes: actualWorkedMinutes,
+          weighted_worked_minutes: weightedWorkedMinutes,
+          automatic_overtime_minutes: automaticOvertimeMinutes,
+          manual_adjustment_minutes: manualAdjustmentMinutes,
+          final_overtime_minutes: finalOvertimeMinutes,
+          has_incomplete_days: hasIncompleteDays,
+          calculated_at: new Date().toISOString(),
+          calculation_version: 1
+        });
+      });
+
+      // Update state for weekly summaries (replaces matching employee summaries)
+      rawSetWeeklyWorkSummaries(prev => {
+        const otherWeekly = prev.filter(s => s.employee_id !== employeeId);
+        return [...otherWeekly, ...computedWeeklySummaries];
+      });
+
+      */
+    } catch (error) {
+      console.error("Error running recalculation for employee:", error);
+      throw error;
+    }
+  };
+
+  const recalculateCompanyHours = async (companyId: string): Promise<void> => {
+    const { error } = await supabase.rpc('recalculate_company_hours', {
+      p_company_id: companyId
+    });
+    if (error) {
+      throw new Error(error.message || 'No se pudo recalcular la empresa.');
+    }
+    const [{ data: daily }, { data: weekly }] = await Promise.all([
+      supabase.from('daily_work_summaries').select('*').eq('company_id', companyId),
+      supabase.from('weekly_work_summaries').select('*').eq('company_id', companyId)
+    ]);
+    rawSetDailyWorkSummaries(prev => [...prev.filter(summary => summary.company_id !== companyId), ...((daily || []) as DailyWorkSummary[])]);
+    rawSetWeeklyWorkSummaries(prev => [...prev.filter(summary => summary.company_id !== companyId), ...((weekly || []) as WeeklyWorkSummary[])]);
+  };
+
+  // 2. Employee Weekly Contracts CRUD
+  const addWeeklyContract = async (contract: Omit<EmployeeWeeklyContract, 'id' | 'created_at' | 'updated_at'>): Promise<void> => {
+    const id = safeUUID();
+    const newContract: EmployeeWeeklyContract = {
+      ...contract,
+      id,
+      created_by: currentUser.profile?.id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    // Check for overlaps
+    const existing = employeeWeeklyContracts.filter(c => c.employee_id === contract.employee_id);
+    const hasOverlap = existing.some(c => {
+      const from = c.effective_from;
+      const to = c.effective_to || '9999-12-31';
+      const newFrom = contract.effective_from;
+      const newTo = contract.effective_to || '9999-12-31';
+      return (newFrom >= from && newFrom <= to) || (newTo >= from && newTo <= to) || (newFrom <= from && newTo >= to);
+    });
+
+    if (hasOverlap) {
+      throw new Error('El nuevo periodo de vigencia del contrato se solapa con uno existente.');
+    }
+
+    const { error } = await supabase.from('employee_weekly_contracts').insert(newContract);
+    if (error) throw new Error(error.message || 'No se pudo guardar el contrato.');
+    rawSetEmployeeWeeklyContracts(prev => [...prev, newContract]);
+
+    const emp = employees.find(e => e.id === contract.employee_id);
+    if (emp) {
+      await recalculateEmployeeHours(emp.id, emp.company_id);
+    }
+  };
+
+  const updateWeeklyContract = async (contract: EmployeeWeeklyContract): Promise<void> => {
+    const updated = {
+      ...contract,
+      updated_at: new Date().toISOString()
+    };
+
+    // Overlap checks
+    const existing = employeeWeeklyContracts.filter(c => c.employee_id === contract.employee_id && c.id !== contract.id);
+    const hasOverlap = existing.some(c => {
+      const from = c.effective_from;
+      const to = c.effective_to || '9999-12-31';
+      const newFrom = contract.effective_from;
+      const newTo = contract.effective_to || '9999-12-31';
+      return (newFrom >= from && newFrom <= to) || (newTo >= from && newTo <= to) || (newFrom <= from && newTo >= to);
+    });
+
+    if (hasOverlap) {
+      throw new Error('El periodo modificado se solapa con un contrato existente.');
+    }
+
+    const { error } = await supabase.from('employee_weekly_contracts').update(updated).eq('id', contract.id);
+    if (error) throw new Error(error.message || 'No se pudo actualizar el contrato.');
+    rawSetEmployeeWeeklyContracts(prev => prev.map(c => c.id === contract.id ? updated : c));
+
+    const emp = employees.find(e => e.id === contract.employee_id);
+    if (emp) {
+      await recalculateEmployeeHours(emp.id, emp.company_id);
+    }
+  };
+
+  const deleteWeeklyContract = async (contractId: string): Promise<void> => {
+    const contract = employeeWeeklyContracts.find(c => c.id === contractId);
+    const { error } = await supabase.from('employee_weekly_contracts').delete().eq('id', contractId);
+    if (error) throw new Error(error.message || 'No se pudo eliminar el contrato.');
+    rawSetEmployeeWeeklyContracts(prev => prev.filter(c => c.id !== contractId));
+
+    if (contract) {
+      const emp = employees.find(e => e.id === contract.employee_id);
+      if (emp) {
+        await recalculateEmployeeHours(emp.id, emp.company_id);
+      }
+    }
+  };
+
+  // 3. Labor Calendars CRUD
+  const addLaborCalendar = async (cal: Omit<LaborCalendar, 'id' | 'status' | 'created_at' | 'updated_at'>): Promise<LaborCalendar> => {
+    const id = safeUUID();
+    const newCal: LaborCalendar = {
+      ...cal,
+      id,
+      status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const exists = laborCalendars.some(c => c.work_center_id === cal.work_center_id && c.year === cal.year);
+    if (exists) {
+      throw new Error(`Ya existe un calendario para este centro de trabajo en el año ${cal.year}.`);
+    }
+
+    const { error } = await supabase.from('labor_calendars').insert(newCal);
+    if (error) throw new Error(error.message || 'No se pudo crear el calendario.');
+    rawSetLaborCalendars(prev => [...prev, newCal]);
+    return newCal;
+  };
+
+  const updateLaborCalendar = async (cal: LaborCalendar): Promise<void> => {
+    const updated = {
+      ...cal,
+      updated_at: new Date().toISOString()
+    };
+    const { error } = await supabase.from('labor_calendars').update(updated).eq('id', cal.id);
+    if (error) throw new Error(error.message || 'No se pudo actualizar el calendario.');
+    rawSetLaborCalendars(prev => prev.map(c => c.id === cal.id ? updated : c));
+    await recalculateCompanyHours(cal.company_id);
+  };
+
+  // 4. Spanish Holidays Import & Conflict Management
+  const importHolidays = async (calendarId: string, province: string, municipality: string): Promise<void> => {
+    const cal = laborCalendars.find(c => c.id === calendarId);
+    if (!cal) return;
+
+    const runId = safeUUID();
+    const run: CalendarImportRun = {
+      id: runId,
+      calendar_id: calendarId,
+      requested_by: currentUser.profile?.id,
+      status: 'processing',
+      source_name: 'Calendario Oficial de Festivos (España)',
+      source_url: 'https://www.boe.es/diario_boe/calendarios.php',
+      requested_at: new Date().toISOString(),
+      days_found: 0,
+      days_created: 0,
+      days_modified: 0,
+      conflicts_found: 0,
+      created_at: new Date().toISOString()
+    };
+    
+    setCalendarImportRuns(prev => [...prev, run]);
+
+    const getEasterDate = (year: number) => {
+      const a = year % 19;
+      const b = Math.floor(year / 100);
+      const c = year % 100;
+      const d = Math.floor(b / 4);
+      const e = b % 4;
+      const f = Math.floor((b + 8) / 25);
+      const g = Math.floor((b - f + 1) / 3);
+      const h = (19 * a + b - d - g + 15) % 30;
+      const i = Math.floor(c / 4);
+      const k = c % 4;
+      const L = (32 + 2 * e + 2 * i - h - k) % 7;
+      const m = Math.floor((a + 11 * h + 22 * L) / 451);
+      const month = Math.floor((h + L - 7 * m + 114) / 31);
+      const day = ((h + L - 7 * m + 114) % 31) + 1;
+      return new Date(Date.UTC(year, month - 1, day));
+    };
+
+    const easter = getEasterDate(cal.year);
+    const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+    const juevesSanto = new Date(easter);
+    juevesSanto.setDate(easter.getDate() - 3);
+
+    const viernesSanto = new Date(easter);
+    viernesSanto.setDate(easter.getDate() - 2);
+
+    const lunesPascua = new Date(easter);
+    lunesPascua.setDate(easter.getDate() + 1);
+
+    const viernesDolores = new Date(easter);
+    viernesDolores.setDate(easter.getDate() - 9);
+
+    const bandoHuerta = new Date(easter);
+    bandoHuerta.setDate(easter.getDate() + 2);
+
+    const baseHolidays = [
+      // --- FESTIVOS NACIONALES ---
+      { date: `${cal.year}-01-01`, name: 'Año Nuevo', classification: 'national_holiday' },
+      { date: `${cal.year}-01-06`, name: 'Epifanía del Señor', classification: 'national_holiday' },
+      { date: formatDate(viernesSanto), name: 'Viernes Santo', classification: 'national_holiday' },
+      { date: `${cal.year}-05-01`, name: 'Fiesta del Trabajo', classification: 'national_holiday' },
+      { date: `${cal.year}-08-15`, name: 'Asunción de la Virgen', classification: 'national_holiday' },
+      { date: `${cal.year}-10-12`, name: 'Fiesta Nacional de España', classification: 'national_holiday' },
+      { date: `${cal.year}-11-01`, name: 'Todos los Santos', classification: 'national_holiday' },
+      { date: `${cal.year}-12-06`, name: 'Día de la Constitución Española', classification: 'national_holiday' },
+      { date: `${cal.year}-12-08`, name: 'Inmaculada Concepción', classification: 'national_holiday' },
+      { date: `${cal.year}-12-25`, name: 'Natividad del Señor', classification: 'national_holiday' },
+
+      // --- FESTIVOS AUTONÓMICOS ---
+      { date: formatDate(juevesSanto), name: 'Jueves Santo', classification: 'autonomous_holiday' },
+      
+      // Comunidad de Madrid
+      { date: `${cal.year}-05-02`, name: 'Fiesta de la Comunidad de Madrid', classification: 'autonomous_holiday', provRestriction: 'Madrid' },
+      
+      // Cataluña
+      { date: `${cal.year}-09-11`, name: 'Fiesta Nacional de Cataluña (Diada)', classification: 'autonomous_holiday', provRestriction: 'Barcelona' },
+      { date: `${cal.year}-09-11`, name: 'Fiesta Nacional de Cataluña (Diada)', classification: 'autonomous_holiday', provRestriction: 'Girona' },
+      { date: `${cal.year}-09-11`, name: 'Fiesta Nacional de Cataluña (Diada)', classification: 'autonomous_holiday', provRestriction: 'Lleida' },
+      { date: `${cal.year}-09-11`, name: 'Fiesta Nacional de Cataluña (Diada)', classification: 'autonomous_holiday', provRestriction: 'Tarragona' },
+      { date: `${cal.year}-12-26`, name: 'San Esteban', classification: 'autonomous_holiday', provRestriction: 'Barcelona' },
+      { date: `${cal.year}-12-26`, name: 'San Esteban', classification: 'autonomous_holiday', provRestriction: 'Girona' },
+      { date: `${cal.year}-12-26`, name: 'San Esteban', classification: 'autonomous_holiday', provRestriction: 'Lleida' },
+      { date: `${cal.year}-12-26`, name: 'San Esteban', classification: 'autonomous_holiday', provRestriction: 'Tarragona' },
+      
+      // Andalucía
+      { date: `${cal.year}-02-28`, name: 'Día de Andalucía', classification: 'autonomous_holiday', provRestriction: 'Sevilla' },
+      { date: `${cal.year}-02-28`, name: 'Día de Andalucía', classification: 'autonomous_holiday', provRestriction: 'Málaga' },
+      { date: `${cal.year}-02-28`, name: 'Día de Andalucía', classification: 'autonomous_holiday', provRestriction: 'Cádiz' },
+      { date: `${cal.year}-02-28`, name: 'Día de Andalucía', classification: 'autonomous_holiday', provRestriction: 'Cadiz' },
+      { date: `${cal.year}-02-28`, name: 'Día de Andalucía', classification: 'autonomous_holiday', provRestriction: 'Granada' },
+      { date: `${cal.year}-02-28`, name: 'Día de Andalucía', classification: 'autonomous_holiday', provRestriction: 'Córdoba' },
+      { date: `${cal.year}-02-28`, name: 'Día de Andalucía', classification: 'autonomous_holiday', provRestriction: 'Cordoba' },
+      { date: `${cal.year}-02-28`, name: 'Día de Andalucía', classification: 'autonomous_holiday', provRestriction: 'Almería' },
+      { date: `${cal.year}-02-28`, name: 'Día de Andalucía', classification: 'autonomous_holiday', provRestriction: 'Huelva' },
+      { date: `${cal.year}-02-28`, name: 'Día de Andalucía', classification: 'autonomous_holiday', provRestriction: 'Jaén' },
+
+      // Región de Murcia
+      { date: `${cal.year}-06-09`, name: 'Día de la Región de Murcia', classification: 'autonomous_holiday', provRestriction: 'Murcia' },
+
+      // Comunidad Valenciana
+      { date: `${cal.year}-10-09`, name: 'Día de la Comunidad Valenciana', classification: 'autonomous_holiday', provRestriction: 'Valencia' },
+      { date: `${cal.year}-10-09`, name: 'Día de la Comunidad Valenciana', classification: 'autonomous_holiday', provRestriction: 'Alicante' },
+      { date: `${cal.year}-10-09`, name: 'Día de la Comunidad Valenciana', classification: 'autonomous_holiday', provRestriction: 'Castellón' },
+      { date: `${cal.year}-03-19`, name: 'San José', classification: 'autonomous_holiday', provRestriction: 'Valencia' },
+      { date: `${cal.year}-03-19`, name: 'San José', classification: 'autonomous_holiday', provRestriction: 'Alicante' },
+      { date: `${cal.year}-03-19`, name: 'San José', classification: 'autonomous_holiday', provRestriction: 'Castellón' },
+
+      // --- FESTIVOS LOCALES (CIUDAD / MUNICIPIO) ---
+      // Madrid Capital
+      { date: `${cal.year}-05-15`, name: 'San Isidro Labrador', classification: 'local_holiday', munRestriction: 'Madrid' },
+      { date: `${cal.year}-11-09`, name: 'Nuestra Señora de la Almudena', classification: 'local_holiday', munRestriction: 'Madrid' },
+
+      // Barcelona Capital
+      { date: `${cal.year}-06-24`, name: 'San Juan', classification: 'local_holiday', munRestriction: 'Barcelona' },
+      { date: `${cal.year}-09-24`, name: 'La Mercè', classification: 'local_holiday', munRestriction: 'Barcelona' },
+
+      // Valencia Capital
+      { date: `${cal.year}-01-22`, name: 'San Vicente Mártir', classification: 'local_holiday', munRestriction: 'Valencia' },
+      { date: formatDate(lunesPascua), name: 'San Vicente Ferrer', classification: 'local_holiday', munRestriction: 'Valencia' },
+
+      // Sevilla Capital
+      { date: `${cal.year}-05-30`, name: 'San Fernando', classification: 'local_holiday', munRestriction: 'Sevilla' },
+      { date: `${cal.year}-04-26`, name: 'Feria de Abril (Sevilla)', classification: 'local_holiday', munRestriction: 'Sevilla' },
+
+      // Málaga Capital
+      { date: `${cal.year}-08-19`, name: 'Incorporación de Málaga a la Corona de Castilla', classification: 'local_holiday', munRestriction: 'Málaga' },
+      { date: `${cal.year}-08-19`, name: 'Incorporación de Málaga a la Corona de Castilla', classification: 'local_holiday', munRestriction: 'Malaga' },
+      { date: `${cal.year}-09-08`, name: 'Nuestra Señora de la Victoria', classification: 'local_holiday', munRestriction: 'Málaga' },
+      { date: `${cal.year}-09-08`, name: 'Nuestra Señora de la Victoria', classification: 'local_holiday', munRestriction: 'Malaga' },
+
+      // Murcia Capital
+      { date: formatDate(bandoHuerta), name: 'Bando de la Huerta', classification: 'local_holiday', munRestriction: 'Murcia' },
+      { date: `${cal.year}-09-15`, name: 'Romería de la Fuensanta (Murcia)', classification: 'local_holiday', munRestriction: 'Murcia' },
+
+      // Lorca
+      { date: `${cal.year}-09-08`, name: 'Virgen de las Huertas', classification: 'local_holiday', munRestriction: 'Lorca' },
+      { date: `${cal.year}-11-23`, name: 'San Clemente', classification: 'local_holiday', munRestriction: 'Lorca' },
+
+      // Cartagena
+      { date: formatDate(viernesDolores), name: 'Viernes de Dolores', classification: 'local_holiday', munRestriction: 'Cartagena' }
+    ];
+
+    const matchingHolidays = baseHolidays.filter(h => {
+      if (h.provRestriction && h.provRestriction.toLowerCase() !== province.toLowerCase()) return false;
+      if (h.munRestriction && h.munRestriction.toLowerCase() !== municipality.toLowerCase()) return false;
+      return true;
+    });
+
+    // Asegurarse de que siempre se importen al menos dos festivos locales para cualquier ciudad
+    const hasLocalHolidays = matchingHolidays.some(h => h.classification === 'local_holiday');
+    if (!hasLocalHolidays && municipality) {
+      const cityName = municipality.trim().charAt(0).toUpperCase() + municipality.trim().slice(1);
+      matchingHolidays.push(
+        { date: `${cal.year}-05-15`, name: `Festivo Local de ${cityName} (Día 1)`, classification: 'local_holiday' },
+        { date: `${cal.year}-09-08`, name: `Festivo Local de ${cityName} (Día 2)`, classification: 'local_holiday' }
+      );
+    }
+
+    let createdCount = 0;
+    let modifiedCount = 0;
+    let conflictCount = 0;
+
+    const newConflicts: CalendarImportConflict[] = [];
+    const newDays: CalendarDay[] = [];
+
+    const types = dayTypeSettings.filter(t => t.company_id === cal.company_id);
+    const getSettingByClassification = (cls: string) => {
+      const found = types.find(t => t.classification === cls) || types.find(t => t.classification === 'national_holiday') || types[0];
+      if (found) return found;
+      return {
+        id: toUUID(`cdts-${cal.company_id}-${cls}`, '99999999'),
+        company_id: cal.company_id,
+        code: cls,
+        name: cls === 'national_holiday' ? 'Festivo Nacional' : cls === 'autonomous_holiday' ? 'Festivo Autonómico' : cls === 'local_holiday' ? 'Festivo Local' : cls,
+        classification: cls,
+        is_working_day: false,
+        reduces_weekly_target: true,
+        work_multiplier: 1.5,
+        color: cls === 'national_holiday' ? '#FCA5A5' : cls === 'autonomous_holiday' ? '#FDE047' : '#F472B6',
+        is_system_type: true,
+        status: 'active' as const,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+    };
+
+    matchingHolidays.forEach(h => {
+      const existingDay = calendarDays.find(d => d.calendar_id === calendarId && d.date === h.date);
+      const matchingSetting = getSettingByClassification(h.classification);
+
+      if (existingDay) {
+        const isDifferent = existingDay.name !== h.name || existingDay.classification !== h.classification;
+        
+        if (isDifferent) {
+          if (existingDay.is_manual || existingDay.manually_modified) {
+            newConflicts.push({
+              id: safeUUID(),
+              import_run_id: runId,
+              calendar_id: calendarId,
+              date: h.date,
+              existing_values: { name: existingDay.name, classification: existingDay.classification },
+              imported_values: { name: h.name, classification: h.classification },
+              conflict_reason: 'El día fue modificado manualmente por el administrador y difiere del festivo oficial importado.',
+              resolution: 'pending',
+              created_at: new Date().toISOString()
+            });
+            conflictCount++;
+          } else {
+            const updated = {
+              ...existingDay,
+              name: h.name,
+              classification: h.classification,
+              day_type_setting_id: matchingSetting.id,
+              review_status: 'pending' as const,
+              updated_at: new Date().toISOString()
+            };
+            newDays.push(updated);
+            modifiedCount++;
+          }
+        }
+      } else {
+        newDays.push({
+          id: safeUUID(),
+          calendar_id: calendarId,
+          date: h.date,
+          day_type_setting_id: matchingSetting.id,
+          name: h.name,
+          classification: h.classification,
+          source_type: 'official_import',
+          source_url: run.source_url,
+          source_reference: 'BOE Calendario Oficial',
+          import_run_id: runId,
+          is_manual: false,
+          manually_modified: false,
+          review_status: 'pending',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+        createdCount++;
+      }
+    });
+
+    const finalRunStatus = conflictCount > 0 ? 'completed_with_conflicts' as const : 'completed' as const;
+    const finalRun: CalendarImportRun = {
+      ...run,
+      status: finalRunStatus,
+      completed_at: new Date().toISOString(),
+      days_found: matchingHolidays.length,
+      days_created: createdCount,
+      days_modified: modifiedCount,
+      conflicts_found: conflictCount
+    };
+
+    setCalendarImportRuns(prev => prev.map(r => r.id === runId ? finalRun : r));
+    
+    if (newConflicts.length > 0) {
+      setCalendarImportConflicts(prev => [...prev, ...newConflicts]);
+    }
+    if (newDays.length > 0) {
+      setCalendarDays(prev => {
+        const otherDays = prev.filter(d => !newDays.some(n => n.id === d.id || (n.calendar_id === d.calendar_id && n.date === d.date)));
+        return [...otherDays, ...newDays];
+      });
+    }
+
+    const updatedCal: LaborCalendar = {
+      ...cal,
+      status: 'pending_review',
+      last_imported_at: new Date().toISOString(),
+      source_summary: `Importados ${matchingHolidays.length} festivos (${createdCount} creados, ${modifiedCount} modificados, ${conflictCount} conflictos).`,
+      updated_at: new Date().toISOString()
+    };
+    setLaborCalendars(prev => prev.map(c => c.id === calendarId ? updatedCal : c));
+  };
+
+  const resolveConflict = async (
+    conflictId: string, 
+    resolution: 'keep_existing' | 'apply_imported' | 'merge_manually', 
+    manualDay?: Partial<CalendarDay>
+  ): Promise<void> => {
+    const conflict = calendarImportConflicts.find(c => c.id === conflictId);
+    if (!conflict) return;
+
+    const cal = laborCalendars.find(c => c.id === conflict.calendar_id);
+    if (!cal) return;
+
+    const existingDay = calendarDays.find(d => d.calendar_id === conflict.calendar_id && d.date === conflict.date);
+
+    if (resolution === 'apply_imported') {
+      const types = dayTypeSettings.filter(t => t.company_id === cal.company_id);
+      const matchingSetting = types.find(t => t.classification === conflict.imported_values.classification) || types[0];
+
+      if (existingDay) {
+        const updated = {
+          ...existingDay,
+          name: conflict.imported_values.name,
+          classification: conflict.imported_values.classification,
+          day_type_setting_id: matchingSetting.id,
+          manually_modified: true,
+          review_status: 'confirmed' as const,
+          updated_at: new Date().toISOString()
+        };
+        setCalendarDays(prev => prev.map(d => d.id === existingDay.id ? updated : d));
+      }
+    } else if (resolution === 'merge_manually' && manualDay) {
+      if (existingDay) {
+        const updated = {
+          ...existingDay,
+          ...manualDay,
+          manually_modified: true,
+          review_status: 'confirmed' as const,
+          updated_at: new Date().toISOString()
+        } as CalendarDay;
+        setCalendarDays(prev => prev.map(d => d.id === existingDay.id ? updated : d));
+      }
+    } else if (resolution === 'keep_existing' && existingDay) {
+      const updated = {
+        ...existingDay,
+        review_status: 'confirmed' as const,
+        updated_at: new Date().toISOString()
+      };
+      setCalendarDays(prev => prev.map(d => d.id === existingDay.id ? updated : d));
+    }
+
+    const updatedConflict: CalendarImportConflict = {
+      ...conflict,
+      resolution,
+      resolved_by: currentUser.profile?.id,
+      resolved_at: new Date().toISOString()
+    };
+
+    setCalendarImportConflicts(prev => prev.map(c => c.id === conflictId ? updatedConflict : c));
+    setTimeout(() => recalculateCompanyHours(cal.company_id), 500);
+  };
+
+  // 5. Overtime Adjustments CRUD
+  const addOvertimeAdjustment = async (
+    weeklySummaryId: string, 
+    employeeId: string, 
+    minutes: number, 
+    reason: string
+  ): Promise<void> => {
+    const { data, error } = await supabase.rpc('add_overtime_adjustment', {
+      p_weekly_summary_id: weeklySummaryId,
+      p_employee_id: employeeId,
+      p_adjustment_minutes: minutes,
+      p_reason: reason.trim()
+    });
+    if (error || !data) {
+      throw new Error(error?.message || 'No se pudo guardar el ajuste.');
+    }
+    rawSetOvertimeAdjustments(prev => [...prev, data as OvertimeAdjustment]);
+    const employee = employees.find(item => item.id === employeeId);
+    if (employee) await recalculateEmployeeHours(employeeId, employee.company_id);
+  };
+
   return (
     <AppContext.Provider value={{
-      companies, setCompanies, workCenters, profiles, setProfiles, employees, devices, timeEntries, setTimeEntries, incidents, requests, auditLogs,
+      companies, setCompanies, workCenters, profiles, setProfiles, employees, devices, timeEntries, setTimeEntries, incidents, requests, auditLogs, setAuditLogs,
       employeeWorkCenters, setEmployeeWorkCenters,
-      currentUser, currentCompany, currentWorkCenter, currentDevice, isDeviceAuthorized,
+      
+      // New Master lists
+      laborCalendars, setLaborCalendars,
+      dayTypeSettings, setDayTypeSettings,
+      calendarDays, setCalendarDays,
+      calendarImportRuns, setCalendarImportRuns,
+      calendarImportConflicts, setCalendarImportConflicts,
+      employeeWeeklyContracts, setEmployeeWeeklyContracts,
+      dailyWorkSummaries, setDailyWorkSummaries,
+      weeklyWorkSummaries, setWeeklyWorkSummaries,
+      overtimeAdjustments, setOvertimeAdjustments,
+
+      currentUser, currentCompany, currentWorkCenter, currentDevice, isDeviceAuthorized, authLoading,
       authorizeDevice, deauthorizeDevice, deleteDevice, loginEmployee, loginAdmin, logout, registerPunch,
       addEmployee, updateEmployee, changeEmployeePin, addWorkCenter, updateWorkCenter, deleteWorkCenter, updateDevice, resolveIncident, resolveRequest, submitRequest, deleteOldEntries, updateCompanySettings,
-      showAlert, refreshData
+      showAlert, refreshData,
+
+      // New Actions
+      recalculateEmployeeHours, recalculateCompanyHours,
+      addWeeklyContract, updateWeeklyContract, deleteWeeklyContract,
+      addLaborCalendar, updateLaborCalendar,
+      importHolidays, resolveConflict, addOvertimeAdjustment
     }}>
       {children}
 

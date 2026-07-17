@@ -1,32 +1,32 @@
-# React + TypeScript + Vite
+# Control de fichajes
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Aplicación React/Vite conectada a Supabase. La autorización real se aplica en PostgreSQL mediante RLS y funciones RPC; los controles de la interfaz no se consideran una barrera de seguridad.
 
-Currently, two official plugins are available:
+## Configuración
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Copia `.env.example` a `.env`.
+2. Configura únicamente la URL y la clave pública `anon` de Supabase.
+3. Aplica, con un usuario propietario de la base de datos, las migraciones de `supabase/migrations` antes de publicar el frontend.
+4. Ejecuta `npm install`, `npm run lint` y `npm run build`.
 
-## React Compiler
+Nunca coloques `SUPABASE_SERVICE_ROLE_KEY`, contraseñas de PostgreSQL ni URLs administrativas en el directorio o entorno de compilación del frontend.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Modelo de seguridad
 
-## Expanding the Oxlint configuration
+- Administradores: Supabase Auth y perfil activo vinculado por `auth_user_id`.
+- Empleados: PIN de exactamente cuatro dígitos, verificado en PostgreSQL con bcrypt, bloqueo de intentos y sesión efímera de cinco minutos.
+- Terminales: secreto aleatorio almacenado solamente como SHA-256 en la base de datos; el alta queda pendiente de aprobación administrativa.
+- Fichajes: hora, secuencia, identidad, empresa y centro se validan en una transacción del servidor.
+- Cálculo laboral: jornadas diarias, calendarios, contratos, redondeos, multiplicadores y horas extra se calculan exclusivamente en PostgreSQL.
+- Integridad: cada cambio de fichaje dispara un recálculo automático; los clientes no pueden escribir resúmenes ni ajustes directamente.
+- Multiempresa: RLS filtra todas las tablas por el perfil autenticado.
+- Auditoría: triggers inmutables; los clientes no pueden modificar el historial.
+- Navegador: no persiste empleados, PIN, fichajes, GPS, incidencias ni auditoría en Web Storage.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+La clave pública `anon` puede estar en el bundle. Su seguridad depende de que las migraciones RLS estén aplicadas.
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
+## Despliegue
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+`public/_headers` contiene las cabeceras recomendadas para plataformas compatibles. Si el alojamiento no procesa ese archivo, configura las mismas cabeceras en el proxy/CDN, especialmente CSP, HSTS, `X-Content-Type-Options` y Permissions Policy.
+
+Las fotografías siguen usando el campo histórico `photo_path`. Para un despliegue con gran volumen se recomienda migrarlas a un bucket privado de Supabase Storage y entregar URLs firmadas de corta duración.

@@ -1,7 +1,10 @@
 import { 
   Company, WorkCenter, Profile, Employee, 
   AuthorizedDevice, TimeEntry, TimeEntryIncident, 
-  CorrectionRequest, AuditLog, GlobalSetting, WeeklySchedule 
+  CorrectionRequest, AuditLog, GlobalSetting, WeeklySchedule,
+  CalendarDayTypeSetting, LaborCalendar, CalendarDay,
+  EmployeeWeeklyContract, DailyWorkSummary, WeeklyWorkSummary,
+  OvertimeAdjustment
 } from './types';
 
 export const mockGlobalSettings: GlobalSetting = {
@@ -64,6 +67,14 @@ export const mockWorkCenters: WorkCenter[] = [
     latitude: 40.416775,
     longitude: -3.703790,
     status: 'active',
+    country: 'España',
+    country_code: 'ES',
+    autonomous_community: 'Comunidad de Madrid',
+    autonomous_community_code: 'MD',
+    province: 'Madrid',
+    province_code: '28',
+    municipality: 'Madrid',
+    municipality_code: '28079',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   },
@@ -75,6 +86,14 @@ export const mockWorkCenters: WorkCenter[] = [
     latitude: 40.266224,
     longitude: -3.738018,
     status: 'active',
+    country: 'España',
+    country_code: 'ES',
+    autonomous_community: 'Comunidad de Madrid',
+    autonomous_community_code: 'MD',
+    province: 'Madrid',
+    province_code: '28',
+    municipality: 'Fuenlabrada',
+    municipality_code: '28058',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   },
@@ -86,6 +105,14 @@ export const mockWorkCenters: WorkCenter[] = [
     latitude: 41.385064,
     longitude: 2.173404,
     status: 'active',
+    country: 'España',
+    country_code: 'ES',
+    autonomous_community: 'Cataluña',
+    autonomous_community_code: 'CT',
+    province: 'Barcelona',
+    province_code: '08',
+    municipality: 'Barcelona',
+    municipality_code: '08019',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   }
@@ -581,3 +608,221 @@ export const mockAuditLogs: AuditLog[] = [
     performed_at: getPastDateString(1, '11:30:00')
   }
 ];
+
+export const mockCalendarDayTypeSettings: CalendarDayTypeSetting[] = [
+  // Acme Day types
+  {
+    id: 'cdts-acme-laborable',
+    company_id: 'comp-acme',
+    code: 'laborable',
+    name: 'Laborable Normal',
+    classification: 'working_day',
+    is_working_day: true,
+    reduces_weekly_target: false,
+    work_multiplier: 1.0,
+    color: '#E2E8F0',
+    is_system_type: true,
+    status: 'active',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'cdts-acme-domingo',
+    company_id: 'comp-acme',
+    code: 'domingo',
+    name: 'Domingo / Descanso Semanal',
+    classification: 'sunday',
+    is_working_day: false,
+    reduces_weekly_target: false,
+    work_multiplier: 1.5,
+    color: '#FCA5A5',
+    is_system_type: true,
+    status: 'active',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'cdts-acme-festivo-nacional',
+    company_id: 'comp-acme',
+    code: 'festivo_nacional',
+    name: 'Festivo Nacional',
+    classification: 'national_holiday',
+    is_working_day: false,
+    reduces_weekly_target: true,
+    work_multiplier: 1.5,
+    color: '#EF4444',
+    is_system_type: true,
+    status: 'active',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'cdts-acme-festivo-local',
+    company_id: 'comp-acme',
+    code: 'festivo_local',
+    name: 'Festivo Local',
+    classification: 'local_holiday',
+    is_working_day: false,
+    reduces_weekly_target: true,
+    work_multiplier: 1.5,
+    color: '#F59E0B',
+    is_system_type: true,
+    status: 'active',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'cdts-acme-jornada-reducida',
+    company_id: 'comp-acme',
+    code: 'jornada_reducida',
+    name: 'Jornada Reducida (Verano)',
+    classification: 'reduced_workday',
+    is_working_day: true,
+    reduces_weekly_target: false,
+    special_target_minutes: 360, // 6 Hours
+    work_multiplier: 1.0,
+    color: '#6EE7B7',
+    is_system_type: false,
+    status: 'active',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'cdts-acme-compensacion',
+    company_id: 'comp-acme',
+    code: 'compensacion',
+    name: 'Día de Compensación',
+    classification: 'compensation_day',
+    is_working_day: false,
+    reduces_weekly_target: true,
+    work_multiplier: 1.0,
+    color: '#93C5FD',
+    is_system_type: false,
+    status: 'active',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+export const mockLaborCalendars: LaborCalendar[] = [
+  {
+    id: 'cal-acme-2026',
+    company_id: 'comp-acme',
+    work_center_id: 'wc-acme-hq',
+    year: 2026,
+    working_week_model: 'monday_to_friday',
+    status: 'active',
+    source_summary: 'Festivos oficiales importados de Madrid 2026',
+    last_imported_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+export const mockCalendarDays: CalendarDay[] = [
+  {
+    id: 'cd-1',
+    calendar_id: 'cal-acme-2026',
+    date: '2026-01-01',
+    day_type_setting_id: 'cdts-acme-festivo-nacional',
+    name: 'Año Nuevo',
+    classification: 'national_holiday',
+    source_type: 'official_import',
+    is_manual: false,
+    manually_modified: false,
+    review_status: 'confirmed',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'cd-2',
+    calendar_id: 'cal-acme-2026',
+    date: '2026-01-06',
+    day_type_setting_id: 'cdts-acme-festivo-nacional',
+    name: 'Epifanía del Señor',
+    classification: 'national_holiday',
+    source_type: 'official_import',
+    is_manual: false,
+    manually_modified: false,
+    review_status: 'confirmed',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'cd-3',
+    calendar_id: 'cal-acme-2026',
+    date: '2026-05-01',
+    day_type_setting_id: 'cdts-acme-festivo-nacional',
+    name: 'Fiesta del Trabajo',
+    classification: 'national_holiday',
+    source_type: 'official_import',
+    is_manual: false,
+    manually_modified: false,
+    review_status: 'confirmed',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'cd-4',
+    calendar_id: 'cal-acme-2026',
+    date: '2026-10-12',
+    day_type_setting_id: 'cdts-acme-festivo-nacional',
+    name: 'Fiesta Nacional de España',
+    classification: 'national_holiday',
+    source_type: 'official_import',
+    is_manual: false,
+    manually_modified: false,
+    review_status: 'confirmed',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'cd-5',
+    calendar_id: 'cal-acme-2026',
+    date: '2026-12-25',
+    day_type_setting_id: 'cdts-acme-festivo-nacional',
+    name: 'Natividad del Señor',
+    classification: 'national_holiday',
+    source_type: 'official_import',
+    is_manual: false,
+    manually_modified: false,
+    review_status: 'confirmed',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+export const mockEmployeeWeeklyContracts: EmployeeWeeklyContract[] = [
+  {
+    id: 'contract-juan-1',
+    employee_id: 'emp-juan',
+    weekly_minutes: 2400, // 40 hours * 60 minutes
+    effective_from: '2026-01-01',
+    reason: 'Contrato Indefinido 40h',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'contract-ana-1',
+    employee_id: 'emp-ana',
+    weekly_minutes: 2400, // 40 hours * 60 minutes
+    effective_from: '2026-01-01',
+    reason: 'Contrato Indefinido 40h',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'contract-pedro-1',
+    employee_id: 'emp-pedro',
+    weekly_minutes: 1800, // 30 hours * 60 minutes
+    effective_from: '2026-01-01',
+    reason: 'Contrato Parcial 30h',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+];
+
+export const mockDailyWorkSummaries: DailyWorkSummary[] = [];
+export const mockWeeklyWorkSummaries: WeeklyWorkSummary[] = [];
+export const mockOvertimeAdjustments: OvertimeAdjustment[] = [];
+

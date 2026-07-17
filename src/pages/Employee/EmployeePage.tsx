@@ -234,14 +234,19 @@ export const EmployeePage: React.FC = () => {
   };
 
   // Submit Request Action
-  const handleRequestSubmit = (e: React.FormEvent) => {
+  const handleRequestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reqDate || !reqTime || !reqReason) {
       showAlert('Por favor rellene todos los campos.', 'error');
       return;
     }
-    submitRequest(reqType, reqDate, reqTime, reqEntryType, reqReason, reqTargetEntryId || undefined);
-    setReqSuccess('Solicitud registrada correctamente. El administrador recibirá una notificación.');
+    try {
+      await submitRequest(reqType, reqDate, reqTime, reqEntryType, reqReason, reqTargetEntryId || undefined);
+      setReqSuccess('Solicitud registrada correctamente. El administrador recibirá una notificación.');
+    } catch (error) {
+      showAlert(error instanceof Error ? error.message : 'No se pudo registrar la solicitud.', 'error');
+      return;
+    }
     setTimeout(() => {
       setReqSuccess('');
       setShowRequestModal(false);
