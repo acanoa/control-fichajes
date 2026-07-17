@@ -314,6 +314,7 @@ export const AdminPage: React.FC = () => {
   const getEmployeeStatusToday = () => {
     const present: string[] = [];
     const resting: string[] = [];
+    const outside: string[] = [];
     const absent: string[] = [];
 
     companyEmployees.forEach(emp => {
@@ -330,15 +331,16 @@ export const AdminPage: React.FC = () => {
         } else if (lastPunch.entry_type === 'break_start') {
           resting.push(emp.id);
         } else {
-          absent.push(emp.id);
+          outside.push(emp.id);
         }
       }
     });
 
-    return { present, resting, absent };
+    return { present, resting, outside, absent };
   };
 
-  const { present, resting, absent } = getEmployeeStatusToday();
+  const { present, resting, outside, absent } = getEmployeeStatusToday();
+  const away = [...outside, ...absent];
   const pendingRequests = companyRequests.filter(r => r.status === 'pending');
 
   const formatLastPunchTime = (dateStr?: string) => {
@@ -542,9 +544,9 @@ export const AdminPage: React.FC = () => {
     const activeCal = laborCalendars.find(c => c.work_center_id === selectedCalendarCenterId && c.year === selectedCalendarYear);
     if (!activeCal) return;
 
-    // Check if modifying active calendar requires a reason
-    if (activeCal.status === 'active' && !dayToEditReason.trim()) {
-      showAlert('Debe indicar un motivo para modificar un calendario activo.', 'error');
+    // Block modifying active calendars
+    if (activeCal.status === 'active') {
+      showAlert('No se puede modificar un calendario activo.', 'error');
       return;
     }
 
@@ -585,22 +587,13 @@ export const AdminPage: React.FC = () => {
         return [...other, newDayObj];
       });
 
-      // Audit Log for active calendar modifications
-      if (activeCal.status === 'active') {
-        const log: AuditLog = {
-          id: safeUUID(),
-          company_id: companyId,
-          entity_type: 'calendar_days',
-          entity_id: newDayObj.id,
-          action: existing ? 'update_day' : 'create_day',
-          old_values: existing || null,
-          new_values: newDayObj,
-          reason: dayToEditReason,
-          performed_by: currentUser.profile?.id,
-          performed_at: new Date().toISOString()
-        };
-        setAuditLogs(prev => [...prev, log]);
-        supabase.from('audit_logs').insert(log).then();
+      if (activeCal.status !== 'draft') {
+        await updateLaborCalendar({
+          ...activeCal,
+          status: 'draft',
+          reviewed_by: undefined,
+          reviewed_at: undefined
+        });
       }
 
       showAlert('Día actualizado correctamente en el calendario.', 'success');
@@ -611,6 +604,28 @@ export const AdminPage: React.FC = () => {
       setTimeout(() => recalculateCompanyHours(companyId), 500);
     } catch (err: any) {
       showAlert(err.message || 'Error al actualizar el día.', 'error');
+    }
+  };
+
+  const handleSaveCalendarDraft = async (calendar: LaborCalendar) => {
+    const pendingConflicts = calendarImportConflicts.filter(
+      conflict => conflict.calendar_id === calendar.id && conflict.resolution === 'pending'
+    );
+    if (pendingConflicts.length > 0) {
+      showAlert('Resuelva todos los conflictos de importación antes de guardar el calendario.', 'error');
+      return;
+    }
+
+    try {
+      await updateLaborCalendar({
+        ...calendar,
+        status: 'pending_review',
+        reviewed_by: currentUser.profile?.id,
+        reviewed_at: new Date().toISOString()
+      });
+      showAlert('Calendario guardado correctamente. Ya puede activarlo cuando esté listo.', 'success');
+    } catch (err: any) {
+      showAlert(err.message || 'No se pudo guardar el calendario.', 'error');
     }
   };
 
@@ -1141,75 +1156,119 @@ export const AdminPage: React.FC = () => {
     setTimeout(() => setSettingsSuccess(false), 2000);
   };
 
-  // Report Downloads
-  const downloadExcel = () => {
-    const reportData = companyEntries
+  // Detail of records report: one row per employee and working day.
+  const reportRows = (() => {
+    const filteredEntries = companyEntries
+      .filter(t => t.status === 'active')
       .filter(t => !reportEmpId || t.employee_id === reportEmpId)
+      .filter(t => !reportCenterId || t.work_center_id === reportCenterId)
       .filter(t => {
         const dateStr = t.registered_at.split('T')[0];
         return dateStr >= reportStartDate && dateStr <= reportEndDate;
       })
-      .map(t => {
-        const emp = companyEmployees.find(e => e.id === t.employee_id);
-        const center = companyCenters.find(c => c.id === t.work_center_id);
-        return {
-          'Empleado': emp?.full_name || 'Desconocido',
-          'Código': emp?.employee_code || '',
-          'DNI': emp?.dni || '',
-          'Centro de Trabajo': center?.name || 'Desconocido',
-          'Fecha': t.registered_at.split('T')[0],
-          'Hora': t.registered_at.split('T')[1].slice(0, 8),
-          'Tipo de Fichaje': t.entry_type.toUpperCase(),
-          'Estado': t.status === 'active' ? 'Activo' : 'Anulado',
-          'Método': t.source.toUpperCase(),
-          'Justificación manual': t.manual_reason || ''
-        };
-      });
+      .sort((a, b) => new Date(a.registered_at).getTime() - new Date(b.registered_at).getTime());
 
-    downloadCsv(reportData, `reporte_fichajes_${activeCompany?.commercial_name || 'empresa'}.csv`);
+    const rowsByEmployeeAndDate = new globalThis.Map<string, {
+      employeeId: string;
+      date: string;
+      entry?: TimeEntry;
+      breakStart?: TimeEntry;
+      exit?: TimeEntry;
+    }>();
+
+    filteredEntries.forEach(timeEntry => {
+      const date = timeEntry.registered_at.split('T')[0];
+      const key = `${timeEntry.employee_id}:${date}`;
+      const row = rowsByEmployeeAndDate.get(key) || {
+        employeeId: timeEntry.employee_id,
+        date
+      };
+
+      if (timeEntry.entry_type === 'entry' && !row.entry) {
+        row.entry = timeEntry;
+      } else if (timeEntry.entry_type === 'break_start' && !row.breakStart) {
+        row.breakStart = timeEntry;
+      } else if (timeEntry.entry_type === 'exit') {
+        row.exit = timeEntry;
+      }
+      rowsByEmployeeAndDate.set(key, row);
+    });
+
+    return [...rowsByEmployeeAndDate.values()]
+      .map(row => ({
+        ...row,
+        employee: companyEmployees.find(employee => employee.id === row.employeeId)
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date) || (a.employee?.full_name || '').localeCompare(b.employee?.full_name || ''));
+  })();
+
+  const formatReportDateTime = (timeEntry?: TimeEntry) => {
+    if (!timeEntry) return '—';
+    return new Date(timeEntry.registered_at).toLocaleString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getReportDeviceName = (timeEntry?: TimeEntry) => {
+    if (!timeEntry) return '—';
+    if (!timeEntry.device_id) return timeEntry.source === 'administrator' ? 'Administrador' : 'Sin dispositivo';
+    return devices.find(device => device.id === timeEntry.device_id)?.name || 'Dispositivo no disponible';
+  };
+
+  const formatReportEvent = (timeEntry?: TimeEntry) => {
+    if (!timeEntry) return '—';
+    return `${formatReportDateTime(timeEntry)} (${getReportDeviceName(timeEntry)})`;
+  };
+
+  // Report Downloads
+  const downloadExcel = () => {
+    const exportRows = reportRows.map(row => ({
+      'Empleado': row.employee?.full_name || 'Desconocido',
+      'Fecha': row.date,
+      'Entrada (Dispositivo)': formatReportEvent(row.entry),
+      'Descanso (Dispositivo)': formatReportEvent(row.breakStart),
+      'Salida (Dispositivo)': formatReportEvent(row.exit)
+    }));
+
+    downloadCsv(exportRows, `detalle_registros_${activeCompany?.commercial_name || 'empresa'}.csv`);
   };
 
   const downloadPDF = () => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ orientation: 'landscape' });
     doc.setFont('Helvetica', 'bold');
-    doc.text(`REPORTE DE CONTROL HORARIO - ${(activeCompany?.commercial_name || 'empresa').toUpperCase()}`, 14, 20);
+    doc.text(`DETALLE DE REGISTROS - ${(activeCompany?.commercial_name || 'empresa').toUpperCase()}`, 14, 16);
     doc.setFontSize(10);
     doc.setFont('Helvetica', 'normal');
-    doc.text(`Periodo: ${reportStartDate} al ${reportEndDate}`, 14, 26);
+    doc.text(`Periodo: ${reportStartDate} al ${reportEndDate}`, 14, 22);
 
-    const reportEntries = companyEntries
-      .filter(t => !reportEmpId || t.employee_id === reportEmpId)
-      .filter(t => {
-        const dateStr = t.registered_at.split('T')[0];
-        return dateStr >= reportStartDate && dateStr <= reportEndDate;
-      });
-
-    let y = 35;
+    let y = 31;
     doc.setFont('Helvetica', 'bold');
     doc.text('Empleado', 14, y);
-    doc.text('Fecha / Hora', 65, y);
-    doc.text('Fichaje', 115, y);
-    doc.text('Estado', 150, y);
-    doc.text('Origen', 175, y);
-    doc.line(14, y + 2, 195, y + 2);
+    doc.text('Entrada (dispositivo)', 70, y);
+    doc.text('Descanso (dispositivo)', 142, y);
+    doc.text('Salida (dispositivo)', 214, y);
+    doc.line(14, y + 2, 283, y + 2);
     y += 7;
 
     doc.setFont('Helvetica', 'normal');
-    reportEntries.forEach((t) => {
-      if (y > 280) {
+    doc.setFontSize(8);
+    reportRows.forEach(row => {
+      if (y > 195) {
         doc.addPage();
         y = 20;
       }
-      const emp = companyEmployees.find(e => e.id === t.employee_id);
-      doc.text(emp?.full_name.slice(0, 20) || 'Desconocido', 14, y);
-      doc.text(new Date(t.registered_at).toLocaleString('es-ES'), 65, y);
-      doc.text(t.entry_type.toUpperCase(), 115, y);
-      doc.text(t.status === 'active' ? 'ACTIVO' : 'ANULADO', 150, y);
-      doc.text(t.source.toUpperCase(), 175, y);
-      y += 6;
+      doc.text((row.employee?.full_name || 'Desconocido').slice(0, 22), 14, y);
+      doc.text(formatReportEvent(row.entry).slice(0, 37), 70, y);
+      doc.text(formatReportEvent(row.breakStart).slice(0, 37), 142, y);
+      doc.text(formatReportEvent(row.exit).slice(0, 37), 214, y);
+      y += 7;
     });
 
-    doc.save(`reporte_fichajes_${activeCompany?.commercial_name || 'empresa'}.pdf`);
+    doc.save(`detalle_registros_${activeCompany?.commercial_name || 'empresa'}.pdf`);
   };
 
   return (
@@ -1455,17 +1514,17 @@ export const AdminPage: React.FC = () => {
                   <AlertTriangle className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-xs uppercase text-brand-subtext font-bold">Ausentes / Salida</h3>
-                  <p className="text-3xl font-black text-brand-text">{absent.length}</p>
+                  <h3 className="text-xs uppercase text-brand-subtext font-bold">Fuera</h3>
+                  <p className="text-3xl font-black text-brand-text">{away.length}</p>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
               <div className="bg-brand-card p-6 rounded-2xl border border-brand-border shadow-sm space-y-4">
                 <h2 className="font-extrabold text-sm text-brand-maroon uppercase tracking-wider flex items-center gap-2">
                   <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full"></span>
-                  Presentes en Planta
+                  Presentes en Centro
                 </h2>
                 <div className="divide-y divide-brand-border text-xs font-semibold max-h-60 overflow-y-auto">
                   {present.length === 0 ? (
@@ -1493,15 +1552,45 @@ export const AdminPage: React.FC = () => {
               </div>
 
               <div className="bg-brand-card p-6 rounded-2xl border border-brand-border shadow-sm space-y-4">
-                <h2 className="font-extrabold text-sm text-rose-700 uppercase tracking-wider flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 bg-rose-500 rounded-full"></span>
-                  Ausentes / Fuera
+                <h2 className="font-extrabold text-sm text-amber-700 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 bg-amber-500 rounded-full"></span>
+                  Descansos
                 </h2>
                 <div className="divide-y divide-brand-border text-xs font-semibold max-h-60 overflow-y-auto">
-                  {absent.length === 0 ? (
-                    <p className="text-brand-subtext text-center py-4">Todos los empleados están presentes.</p>
+                  {resting.length === 0 ? (
+                    <p className="text-brand-subtext text-center py-4">No hay empleados en descanso.</p>
                   ) : (
-                    absent.map(id => {
+                    resting.map(id => {
+                      const emp = companyEmployees.find(e => e.id === id);
+                      const breakStart = [...companyEntries]
+                        .filter(p => p.employee_id === id && p.entry_type === 'break_start' && p.status === 'active')
+                        .sort((a, b) => new Date(b.registered_at).getTime() - new Date(a.registered_at).getTime())[0];
+                      return (
+                        <div key={id} className="py-2.5 flex items-center justify-between">
+                          <div>
+                            <p className="text-brand-text font-bold">{emp?.full_name}</p>
+                            <p className="text-[10px] text-amber-700 font-bold mt-0.5">
+                              Inicio descanso: {formatLastPunchTime(breakStart?.registered_at)}
+                            </p>
+                          </div>
+                          <span className="font-mono text-[10px] text-brand-subtext">{emp?.employee_code}</span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-brand-card p-6 rounded-2xl border border-brand-border shadow-sm space-y-4">
+                <h2 className="font-extrabold text-sm text-rose-700 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 bg-rose-500 rounded-full"></span>
+                  Fuera
+                </h2>
+                <div className="divide-y divide-brand-border text-xs font-semibold max-h-60 overflow-y-auto">
+                  {away.length === 0 ? (
+                    <p className="text-brand-subtext text-center py-4">No hay empleados fuera del centro.</p>
+                  ) : (
+                    away.map(id => {
                       const emp = companyEmployees.find(e => e.id === id);
                       const lastExit = [...companyEntries]
                         .filter(p => p.employee_id === id && p.entry_type === 'exit' && p.status === 'active')
@@ -1511,7 +1600,9 @@ export const AdminPage: React.FC = () => {
                           <div>
                             <p className="text-brand-text font-bold">{emp?.full_name}</p>
                             <p className="text-[10px] text-rose-600 font-bold mt-0.5">
-                              Última Salida: {formatLastPunchTime(lastExit?.registered_at)}
+                              {lastExit
+                                ? `Última salida: ${formatLastPunchTime(lastExit.registered_at)}`
+                                : 'Sin fichajes registrados hoy'}
                             </p>
                           </div>
                           <span className="font-mono text-[10px] text-brand-subtext">{emp?.employee_code}</span>
@@ -2035,10 +2126,32 @@ export const AdminPage: React.FC = () => {
         {/* Tab 9. REPORTS */}
         {activeTab === 'reports' && (
           <div className="space-y-6">
-            <h1 className="text-2xl font-black text-brand-maroon">DESCARGA DE INFORMES</h1>
+            <div>
+              <h1 className="text-2xl font-black text-brand-maroon">INFORMES</h1>
+              <p className="text-xs text-brand-subtext mt-1">Detalle de registros de jornada por empleado y fecha.</p>
+            </div>
 
-            <div className="bg-brand-card p-6 rounded-2xl border border-brand-border shadow-sm max-w-xl space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-brand-card rounded-2xl border border-brand-border shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-brand-border bg-brand-cream/20 space-y-5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={downloadPDF}
+                    className="flex items-center justify-center gap-2 bg-brand-maroon hover:bg-brand-maroon/90 text-white font-bold px-4 py-2.5 rounded-xl hover:shadow-lg active:scale-95 transition-all text-xs uppercase tracking-wider"
+                  >
+                    <FileText className="w-4 h-4" /> PDF
+                  </button>
+                  <button
+                    onClick={downloadExcel}
+                    className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl hover:shadow-lg active:scale-95 transition-all text-xs uppercase tracking-wider"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" /> Excel
+                  </button>
+                  <h2 className="font-black text-sm uppercase tracking-wider text-brand-text ml-0 sm:ml-2">
+                    Detalle de registros
+                  </h2>
+                </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-brand-subtext mb-2">Filtrar Empleado</label>
                   <select
@@ -2066,9 +2179,7 @@ export const AdminPage: React.FC = () => {
                     ))}
                   </select>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-brand-subtext mb-2">Fecha Inicio</label>
                   <input
@@ -2089,20 +2200,40 @@ export const AdminPage: React.FC = () => {
                   />
                 </div>
               </div>
+              </div>
 
-              <div className="flex gap-4 pt-4 border-t border-brand-border/40">
-                <button
-                  onClick={downloadExcel}
-                  className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl hover:shadow-lg active:scale-95 transition-all text-xs uppercase tracking-wider"
-                >
-                  <FileSpreadsheet className="w-4 h-4" /> Exportar Excel
-                </button>
-                <button
-                  onClick={downloadPDF}
-                  className="flex-1 flex items-center justify-center gap-2 bg-brand-maroon hover:bg-brand-maroon/90 text-white font-bold py-3 rounded-xl hover:shadow-lg active:scale-95 transition-all text-xs uppercase tracking-wider"
-                >
-                  <FileText className="w-4 h-4" /> Exportar PDF
-                </button>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left border-collapse">
+                  <thead>
+                    <tr className="bg-brand-cream/50 text-[10px] uppercase font-bold tracking-wider text-brand-subtext border-b border-brand-border">
+                      <th className="px-4 py-3">Empleado</th>
+                      <th className="px-4 py-3">Entrada (dispositivo)</th>
+                      <th className="px-4 py-3">Descanso (dispositivo)</th>
+                      <th className="px-4 py-3">Salida (dispositivo)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-brand-border text-xs font-semibold">
+                    {reportRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-10 text-center text-brand-subtext">
+                          No hay registros para los filtros seleccionados.
+                        </td>
+                      </tr>
+                    ) : (
+                      reportRows.map(row => (
+                        <tr key={`${row.employeeId}-${row.date}`} className="hover:bg-brand-cream/10">
+                          <td className="px-4 py-3.5">
+                            <p className="font-bold text-brand-text">{row.employee?.full_name || 'Desconocido'}</p>
+                            <p className="text-[10px] text-brand-subtext font-mono mt-0.5">{row.employee?.employee_code || ''}</p>
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap">{formatReportEvent(row.entry)}</td>
+                          <td className="px-4 py-3.5 whitespace-nowrap">{formatReportEvent(row.breakStart)}</td>
+                          <td className="px-4 py-3.5 whitespace-nowrap">{formatReportEvent(row.exit)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -2257,7 +2388,7 @@ export const AdminPage: React.FC = () => {
                         activeCal.status === 'pending_review' ? 'bg-amber-100 text-amber-800 border border-amber-250' :
                         'bg-gray-150 text-gray-700 border border-gray-300'
                       }`}>
-                        Estado: {activeCal.status === 'active' ? 'Activo' : activeCal.status === 'pending_review' ? 'Pendiente' : 'Borrador'}
+                        Estado: {activeCal.status === 'active' ? 'Activo' : activeCal.status === 'pending_review' ? 'Guardado' : 'Borrador sin guardar'}
                       </span>
                       <span className="text-[9.5px] text-brand-subtext font-bold">
                         Modelo: <span className="font-extrabold text-brand-text">{activeCal.working_week_model === 'monday_to_friday' ? 'Lunes a Viernes' : 'Lunes a Sábado'}</span>
@@ -2270,37 +2401,58 @@ export const AdminPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          const prov = targetCenter?.province || 'Madrid';
-                          const mun = targetCenter?.municipality || 'Madrid';
-                          importHolidays(activeCal.id, prov, mun);
-                          showAlert(`Búsqueda de festivos finalizada para ${mun} (${prov}). Revise los cambios e incidencias detectadas.`, 'info');
-                        }}
-                        className="px-2.5 py-1.5 bg-brand-cream border border-brand-border text-brand-maroon text-[9px] font-black uppercase tracking-wider rounded-lg hover:bg-brand-maroon hover:text-white transition-all active:scale-95 shadow-xs"
-                      >
-                        ⚡ Importar Festivos
-                      </button>
-
                       {activeCal.status !== 'active' && (
-                        <button
-                          onClick={() => {
-                            if (calConflicts.length > 0) {
-                              showAlert('Resuelva todos los conflictos de importación pendientes antes de activar.', 'error');
-                              return;
-                            }
-                            updateLaborCalendar({
-                              ...activeCal,
-                              status: 'active',
-                              activated_by: currentUser.profile?.id,
-                              activated_at: new Date().toISOString()
-                            });
-                            showAlert('El calendario laboral ha sido activado correctamente.', 'success');
-                          }}
-                          className="px-2.5 py-1.5 bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider rounded-lg hover:bg-emerald-700 transition-all active:scale-95 shadow-xs"
-                        >
-                          ✓ Activar
-                        </button>
+                        <>
+                          <button
+                            onClick={async () => {
+                              const prov = targetCenter?.province || 'Madrid';
+                              const mun = targetCenter?.municipality || 'Madrid';
+                              try {
+                                await importHolidays(activeCal.id, prov, mun);
+                                showAlert(`Festivos importados para ${mun} (${prov}). Puede modificarlos antes de guardar el calendario.`, 'info');
+                              } catch (err: any) {
+                                showAlert(err.message || 'No se pudieron importar los festivos.', 'error');
+                              }
+                            }}
+                            className="px-2.5 py-1.5 bg-brand-cream border border-brand-border text-brand-maroon text-[9px] font-black uppercase tracking-wider rounded-lg hover:bg-brand-maroon hover:text-white transition-all active:scale-95 shadow-xs"
+                          >
+                            ⚡ Importar Festivos
+                          </button>
+
+                          {activeCal.status === 'draft' && (
+                            <button
+                              onClick={() => handleSaveCalendarDraft(activeCal)}
+                              className="px-2.5 py-1.5 bg-blue-600 text-white text-[9px] font-black uppercase tracking-wider rounded-lg hover:bg-blue-700 transition-all active:scale-95 shadow-xs"
+                            >
+                              💾 Guardar calendario
+                            </button>
+                          )}
+
+                          {activeCal.status === 'pending_review' && (
+                            <button
+                              onClick={async () => {
+                                if (calConflicts.length > 0) {
+                                  showAlert('Resuelva todos los conflictos de importación pendientes antes de activar.', 'error');
+                                  return;
+                                }
+                                try {
+                                  await updateLaborCalendar({
+                                    ...activeCal,
+                                    status: 'active',
+                                    activated_by: currentUser.profile?.id,
+                                    activated_at: new Date().toISOString()
+                                  });
+                                  showAlert('El calendario laboral ha sido activado correctamente.', 'success');
+                                } catch (err: any) {
+                                  showAlert(err.message || 'No se pudo activar el calendario.', 'error');
+                                }
+                              }}
+                              className="px-2.5 py-1.5 bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider rounded-lg hover:bg-emerald-700 transition-all active:scale-95 shadow-xs"
+                            >
+                              ✓ Activar
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -3078,105 +3230,113 @@ export const AdminPage: React.FC = () => {
       )}
 
       {/* EDIT DAY IN CALENDAR MODAL OVERLAY */}
-      {showDayEditModal && (
-        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-brand-border shadow-2xl w-full max-w-sm overflow-hidden animate-scale-up">
-            <div className="bg-brand-maroon text-white p-4 flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-xs uppercase tracking-wider">Modificar Día del Calendario</h3>
-                <p className="text-[9px] text-white/80 font-bold mt-0.5">{new Date(dayToEditDate).toLocaleDateString('es-ES', { dateStyle: 'full' })}</p>
+      {showDayEditModal && (() => {
+        const activeCal = laborCalendars.find(c => c.work_center_id === selectedCalendarCenterId && c.year === selectedCalendarYear);
+        const isCalendarActive = activeCal?.status === 'active';
+
+        return (
+          <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl border border-brand-border shadow-2xl w-full max-w-sm overflow-hidden animate-scale-up">
+              <div className="bg-brand-maroon text-white p-4 flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-xs uppercase tracking-wider">
+                    {isCalendarActive ? 'Ver Día del Calendario' : 'Modificar Día del Calendario'}
+                  </h3>
+                  <p className="text-[9px] text-white/80 font-bold mt-0.5">{new Date(dayToEditDate).toLocaleDateString('es-ES', { dateStyle: 'full' })}</p>
+                </div>
+                <button onClick={() => setShowDayEditModal(false)} className="p-1 hover:bg-white/10 rounded-full">
+                  <X className="w-5 h-5 text-white" />
+                </button>
               </div>
-              <button onClick={() => setShowDayEditModal(false)} className="p-1 hover:bg-white/10 rounded-full">
-                <X className="w-5 h-5 text-white" />
-              </button>
+
+              <form onSubmit={handleSaveDayDetails} className="p-5 space-y-4 text-xs font-semibold text-brand-text">
+                <div>
+                  <label className="block text-[9px] font-black uppercase text-brand-subtext tracking-wider mb-1">Tipo de Festivo</label>
+                  <select
+                    value={dayToEditTypeId}
+                    disabled={isCalendarActive}
+                    onChange={(e) => {
+                      const typeId = e.target.value;
+                      setDayToEditTypeId(typeId);
+                      const selectedSetting = dayTypeSettings.find(s => s.id === typeId);
+                      if (selectedSetting && (!dayToEditName || dayToEditName === 'Laborable' || dayToEditName === 'Domingo / Descanso')) {
+                        setDayToEditName(selectedSetting.name);
+                      }
+                    }}
+                    required
+                    className="w-full px-3 py-2 border border-brand-border rounded-lg bg-white text-xs font-semibold disabled:bg-brand-cream/40 disabled:text-brand-subtext/80 disabled:cursor-not-allowed"
+                  >
+                    <option value="">-- Seleccionar --</option>
+                    {dayTypeSettings.filter(s => s.company_id === companyId).map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} (Mult: {s.work_multiplier}x • {s.reduces_weekly_target ? 'Reduce Obj' : 'No reduce'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black uppercase text-brand-subtext tracking-wider mb-1">Descripción / Nombre del Festivo</label>
+                  <input
+                    type="text"
+                    value={dayToEditName}
+                    disabled={isCalendarActive}
+                    onChange={(e) => setDayToEditName(e.target.value)}
+                    placeholder="Ej. Año Nuevo, Reyes Magos, Festivo Local"
+                    required
+                    className="w-full px-3 py-2 border border-brand-border rounded-lg text-xs disabled:bg-brand-cream/40 disabled:text-brand-subtext/80 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black uppercase text-brand-subtext tracking-wider mb-1">Notas Internas</label>
+                  <textarea
+                    value={dayToEditNotes}
+                    disabled={isCalendarActive}
+                    onChange={(e) => setDayToEditNotes(e.target.value)}
+                    placeholder="Información adicional o detalles sobre el cambio..."
+                    className="w-full px-3 py-2 border border-brand-border rounded-lg h-16 resize-none disabled:bg-brand-cream/40 disabled:text-brand-subtext/80 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                {isCalendarActive ? (
+                  <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-250 text-emerald-800 font-bold text-[10px] leading-tight">
+                    ✓ Este calendario está activo. No admite modificaciones adicionales.
+                  </div>
+                ) : null}
+
+                <div className="flex gap-3 pt-2">
+                  {isCalendarActive ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowDayEditModal(false)}
+                      className="w-full py-2 bg-brand-cream border border-brand-border text-brand-maroon font-bold rounded-lg uppercase"
+                    >
+                      Cerrar
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setShowDayEditModal(false)}
+                        className="flex-1 py-2 bg-brand-cream border border-brand-border text-brand-maroon font-bold rounded-lg uppercase"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        className="flex-1 py-2 bg-brand-maroon text-white font-bold rounded-lg uppercase shadow-md hover:bg-brand-maroon/90"
+                      >
+                        Guardar Día
+                      </button>
+                    </>
+                  )}
+                </div>
+              </form>
             </div>
-
-             <form onSubmit={handleSaveDayDetails} className="p-5 space-y-4 text-xs font-semibold text-brand-text">
-              <div>
-                <label className="block text-[9px] font-black uppercase text-brand-subtext tracking-wider mb-1">Tipo de Festivo</label>
-                <select
-                  value={dayToEditTypeId}
-                  onChange={(e) => {
-                    const typeId = e.target.value;
-                    setDayToEditTypeId(typeId);
-                    const selectedSetting = dayTypeSettings.find(s => s.id === typeId);
-                    if (selectedSetting && (!dayToEditName || dayToEditName === 'Laborable' || dayToEditName === 'Domingo / Descanso')) {
-                      setDayToEditName(selectedSetting.name);
-                    }
-                  }}
-                  required
-                  className="w-full px-3 py-2 border border-brand-border rounded-lg bg-white text-xs font-semibold"
-                >
-                  <option value="">-- Seleccionar --</option>
-                  {dayTypeSettings.filter(s => s.company_id === companyId).map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} (Mult: {s.work_multiplier}x • {s.reduces_weekly_target ? 'Reduce Obj' : 'No reduce'})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[9px] font-black uppercase text-brand-subtext tracking-wider mb-1">Descripción / Nombre del Festivo</label>
-                <input
-                  type="text"
-                  value={dayToEditName}
-                  onChange={(e) => setDayToEditName(e.target.value)}
-                  placeholder="Ej. Año Nuevo, Reyes Magos, Festivo Local"
-                  required
-                  className="w-full px-3 py-2 border border-brand-border rounded-lg text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[9px] font-black uppercase text-brand-subtext tracking-wider mb-1">Notas Internas</label>
-                <textarea
-                  value={dayToEditNotes}
-                  onChange={(e) => setDayToEditNotes(e.target.value)}
-                  placeholder="Información adicional o detalles sobre el cambio..."
-                  className="w-full px-3 py-2 border border-brand-border rounded-lg h-16 resize-none"
-                />
-              </div>
-
-              {(() => {
-                const activeCal = laborCalendars.find(c => c.work_center_id === selectedCalendarCenterId && c.year === selectedCalendarYear);
-                if (activeCal?.status === 'active') {
-                  return (
-                    <div className="bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-                      <label className="block text-[9px] font-black uppercase text-amber-800 tracking-wider mb-1">Motivo del Cambio (Requerido en Calendario Activo)</label>
-                      <input
-                        type="text"
-                        value={dayToEditReason}
-                        onChange={(e) => setDayToEditReason(e.target.value)}
-                        placeholder="Justificación del cambio..."
-                        required
-                        className="w-full px-3 py-1.5 border border-amber-300 rounded-lg text-xs"
-                      />
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowDayEditModal(false)}
-                  className="flex-1 py-2 bg-brand-cream border border-brand-border text-brand-maroon font-bold rounded-lg uppercase"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 bg-brand-maroon text-white font-bold rounded-lg uppercase shadow-md hover:bg-brand-maroon/90"
-                >
-                  Guardar Día
-                </button>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* DAY TYPE CONFIG MODAL OVERLAY */}
       {showDayTypeModal && (

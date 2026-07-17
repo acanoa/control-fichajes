@@ -2129,7 +2129,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const updatedCal: LaborCalendar = {
       ...cal,
-      status: 'pending_review',
+      status: 'draft',
+      reviewed_by: undefined,
+      reviewed_at: undefined,
       last_imported_at: new Date().toISOString(),
       source_summary: `Importados ${matchingHolidays.length} festivos (${createdCount} creados, ${modifiedCount} modificados, ${conflictCount} conflictos).`,
       updated_at: new Date().toISOString()
