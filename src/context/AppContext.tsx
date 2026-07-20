@@ -572,8 +572,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const loadPublicRegistrationOptions = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) return;
       const { data, error } = await supabase.rpc('list_device_registration_options');
       if (error || !data) return;
       if (active) {
