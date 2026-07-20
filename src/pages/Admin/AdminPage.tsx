@@ -63,7 +63,7 @@ export const AdminPage: React.FC = () => {
     incidents, requests, auditLogs, setAuditLogs, employeeWorkCenters,
     addEmployee, updateEmployee, changeEmployeePin,
     addWorkCenter, updateWorkCenter, deleteWorkCenter, updateDevice, resolveIncident,
-    deauthorizeDevice, deleteDevice, resolveRequest, deleteOldEntries, updateCompanySettings,
+    approveDeviceRegistration, deauthorizeDevice, deleteDevice, resolveRequest, deleteOldEntries, updateCompanySettings,
     setTimeEntries, showAlert, refreshData,
     setCalendarDays, setDayTypeSettings
   } = useApp();
@@ -1812,6 +1812,22 @@ export const AdminPage: React.FC = () => {
                       </td>
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex justify-end gap-1.5">
+                          {dev.status === 'pending' && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await approveDeviceRegistration(dev.id);
+                                  showAlert('Dispositivo aprobado correctamente.', 'success');
+                                } catch (err: any) {
+                                  showAlert(err.message || 'No se pudo aprobar el dispositivo.', 'error');
+                                }
+                              }}
+                              className="p-1.5 text-blue-700 hover:bg-blue-50 rounded-lg transition-all"
+                              title="Aprobar Dispositivo"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => openDeviceModal(dev)}
                             className="p-1.5 text-brand-maroon hover:bg-brand-cream/50 rounded-lg transition-all"

@@ -66,6 +66,7 @@ interface AppContextType {
 
   // Actions
   authorizeDevice: (name: string, companyId: string, workCenterId: string, cameraWorking: boolean) => Promise<AuthorizedDevice>;
+  approveDeviceRegistration: (deviceId: string) => Promise<void>;
   deauthorizeDevice: (deviceId: string) => void;
   deleteDevice: (deviceId: string) => Promise<void>;
   loginEmployee: (pin: string) => Promise<Employee>;
@@ -612,6 +613,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('cf_device_token', data.device_token);
     setCurrentDevice(data.device as AuthorizedDevice);
     return data.device as AuthorizedDevice;
+  };
+
+  const approveDeviceRegistration = async (deviceId: string): Promise<void> => {
+    const device = devices.find(d => d.id === deviceId);
+    if (!device) {
+      throw new Error('No se encontró el dispositivo.');
+    }
+
+    const { data, error } = await supabase.rpc('approve_device_registration', {
+      p_device_id: deviceId
+    });
+
+    if (error || !data) {
+      throw new Error(error?.message || 'No se pudo aprobar el dispositivo.');
+    }
+
+    const approvedDevice = data as AuthorizedDevice;
+    setDevices(prev => prev.map(d => d.id === approvedDevice.id ? approvedDevice : d));
+
+    if (currentDevice?.id === approvedDevice.id) {
+      setCurrentDevice(approvedDevice);
+    }
   };
 
   const deauthorizeDevice = (deviceId: string) => {
@@ -2237,7 +2260,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       overtimeAdjustments, setOvertimeAdjustments,
 
       currentUser, currentCompany, currentWorkCenter, currentDevice, isDeviceAuthorized, authLoading,
-      authorizeDevice, deauthorizeDevice, deleteDevice, loginEmployee, loginAdmin, logout, registerPunch,
+      authorizeDevice, approveDeviceRegistration, deauthorizeDevice, deleteDevice, loginEmployee, loginAdmin, logout, registerPunch,
       addEmployee, updateEmployee, changeEmployeePin, addWorkCenter, updateWorkCenter, deleteWorkCenter, updateDevice, resolveIncident, resolveRequest, submitRequest, deleteOldEntries, updateCompanySettings,
       showAlert, refreshData,
 

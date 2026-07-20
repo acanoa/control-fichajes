@@ -29,6 +29,7 @@ export const PortalPage: React.FC = () => {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraImg, setCameraImg] = useState<string | null>(null);
   const [regError, setRegError] = useState('');
+  const [regSuccess, setRegSuccess] = useState('');
 
   // Handle PIN keypad input
   const handleKeypadPress = (val: string) => {
@@ -152,7 +153,9 @@ export const PortalPage: React.FC = () => {
     }
 
     try {
+      setRegSuccess('');
       await authorizeDevice(deviceName, regCompany, regCenter, true);
+      setRegSuccess('Solicitud enviada. Queda pendiente de aprobación del administrador del centro.');
       setActiveTab('employee');
       // Reset form
       setDeviceName('');
@@ -184,7 +187,9 @@ export const PortalPage: React.FC = () => {
           <span className={`px-2 py-0.5 rounded-full text-[10px] ${
             isDeviceAuthorized 
               ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-              : 'bg-amber-100 text-amber-800 border border-amber-200'
+              : currentDevice?.status === 'pending'
+                ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                : 'bg-amber-100 text-amber-800 border border-amber-200'
           }`}>
             {isDeviceAuthorized ? 'VALIDADO' : 'PENDIENTE CÁMARA'}
           </span>
@@ -486,3 +491,4 @@ export const PortalPage: React.FC = () => {
     </div>
   );
 };
+
