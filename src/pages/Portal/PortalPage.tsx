@@ -1,6 +1,7 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Key, Shield, Building, User, Video, AlertTriangle } from 'lucide-react';
+import { supabase } from '../../services/supabase';
 
 export const PortalPage: React.FC = () => {
   const { 
@@ -30,6 +31,8 @@ export const PortalPage: React.FC = () => {
   const [cameraImg, setCameraImg] = useState<string | null>(null);
   const [regError, setRegError] = useState('');
   const [regSuccess, setRegSuccess] = useState('');
+  const [registrationCompanies, setRegistrationCompanies] = useState(companies);
+  const [registrationWorkCenters, setRegistrationWorkCenters] = useState(workCenters);
 
   // Handle PIN keypad input
   const handleKeypadPress = (val: string) => {
@@ -161,7 +164,28 @@ export const PortalPage: React.FC = () => {
     }
   };
 
-  const filteredCenters = workCenters.filter(c => c.company_id === regCompany && c.status === 'active');
+  const filteredCenters = registrationWorkCenters.filter(c => c.company_id === regCompany && c.status === 'active');
+
+  useEffect(() => {
+    let alive = true;
+
+    const loadRegistrationOptions = async () => {
+      if (activeTab !== 'register') return;
+      if (registrationCompanies.length > 0 && registrationWorkCenters.length > 0) return;
+
+      const { data, error } = await supabase.rpc('list_device_registration_options');
+      if (!alive || error || !data) return;
+
+      setRegistrationCompanies((data.companies || []) as typeof companies);
+      setRegistrationWorkCenters((data.work_centers || []) as typeof workCenters);
+    };
+
+    void loadRegistrationOptions();
+
+    return () => {
+      alive = false;
+    };
+  }, [activeTab, registrationCompanies.length, registrationWorkCenters.length, companies, workCenters]);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center sm:p-4 bg-brand-cream/10 min-h-screen w-full">
@@ -490,4 +514,5 @@ export const PortalPage: React.FC = () => {
     </div>
   );
 };
+
 
