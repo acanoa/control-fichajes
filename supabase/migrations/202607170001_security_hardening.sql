@@ -401,6 +401,15 @@ begin
   ) then
     raise exception 'Empresa o centro no válido';
   end if;
+  if exists (
+    select 1
+    from "Gestion_Fichajes".authorized_devices d
+    where d.company_id = p_company_id
+      and d.work_center_id = p_work_center_id
+      and d.status = 'pending'
+  ) then
+    raise exception 'Ya existe una solicitud pendiente para este centro';
+  end if;
   if (
     select count(*) from "Gestion_Fichajes".authorized_devices d
     where d.company_id = p_company_id and d.work_center_id = p_work_center_id

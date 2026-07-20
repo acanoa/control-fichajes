@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Key, Shield, Building, User, Video, AlertTriangle } from 'lucide-react';
 
@@ -155,13 +155,7 @@ export const PortalPage: React.FC = () => {
     try {
       setRegSuccess('');
       await authorizeDevice(deviceName, regCompany, regCenter, true);
-      setRegSuccess('Solicitud enviada. Queda pendiente de aprobación del administrador del centro.');
-      setActiveTab('employee');
-      // Reset form
-      setDeviceName('');
-      setRegCompany('');
-      setRegCenter('');
-      setCameraTestStatus('idle');
+      setRegSuccess('Solicitud enviada. Queda pendiente de aprobación o rechazo del administrador del centro.');
     } catch (err: any) {
       setRegError(err.message || 'Error registrando el dispositivo.');
     }
@@ -191,7 +185,7 @@ export const PortalPage: React.FC = () => {
                 ? 'bg-blue-100 text-blue-800 border border-blue-200'
                 : 'bg-amber-100 text-amber-800 border border-amber-200'
           }`}>
-            {isDeviceAuthorized ? 'VALIDADO' : 'PENDIENTE CÁMARA'}
+            {isDeviceAuthorized ? 'VALIDADO' : currentDevice?.status === 'pending' ? 'PENDIENTE APROBACIÓN' : 'PENDIENTE CÁMARA'}
           </span>
         </div>
 
@@ -382,6 +376,11 @@ export const PortalPage: React.FC = () => {
               {regError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-xl text-sm font-semibold">
                   {regError}
+                </div>
+              )}
+              {regSuccess && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-2.5 rounded-xl text-sm font-semibold">
+                  {regSuccess}
                 </div>
               )}
 
