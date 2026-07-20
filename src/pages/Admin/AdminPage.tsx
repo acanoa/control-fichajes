@@ -1641,7 +1641,8 @@ export const AdminPage: React.FC = () => {
             </div>
 
             <div className="bg-brand-card rounded-2xl border border-brand-border overflow-hidden shadow-sm">
-              <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left border-collapse">
                 <thead>
                   <tr className="bg-brand-cream/50 text-[10px] uppercase font-bold tracking-wider text-brand-subtext border-b border-brand-border">
                     <th className="px-4 py-3">Código</th>
@@ -1702,7 +1703,8 @@ export const AdminPage: React.FC = () => {
                     );
                   })}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1774,7 +1776,8 @@ export const AdminPage: React.FC = () => {
             <h1 className="text-2xl font-black text-brand-maroon">DISPOSITIVOS AUTORIZADOS</h1>
 
             <div className="bg-brand-card rounded-2xl border border-brand-border overflow-hidden shadow-sm">
-              <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left border-collapse">
                 <thead>
                   <tr className="bg-brand-cream/50 text-[10px] uppercase font-bold tracking-wider text-brand-subtext border-b border-brand-border">
                     <th className="px-4 py-3">Nombre</th>
@@ -1837,7 +1840,8 @@ export const AdminPage: React.FC = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -2041,60 +2045,62 @@ export const AdminPage: React.FC = () => {
                   No se han registrado incidencias en la captura de fichajes.
                 </div>
               ) : (
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-brand-cream/50 text-[10px] uppercase font-bold tracking-wider text-brand-subtext border-b border-brand-border">
-                      <th className="px-4 py-3">Empleado</th>
-                      <th className="px-4 py-3">Fecha/Hora</th>
-                      <th className="px-4 py-3">Tipo de Incidencia</th>
-                      <th className="px-4 py-3">Falta Foto</th>
-                      <th className="px-4 py-3">Falta GPS</th>
-                      <th className="px-4 py-3">Detalle / Justificación</th>
-                      <th className="px-4 py-3 text-right">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-brand-border text-xs font-semibold">
-                    {companyIncidents.map(inc => {
-                      const emp = companyEmployees.find(e => e.id === inc.employee_id);
-                      const isResolved = inc.description && inc.description.includes('JUSTIFICADO');
-                      
-                      return (
-                        <tr key={inc.id} className="hover:bg-brand-cream/10">
-                          <td className="px-4 py-3.5">
-                            <p className="font-bold">{emp?.full_name}</p>
-                            <p className="text-[10px] text-brand-subtext">{emp?.employee_code}</p>
-                          </td>
-                          <td className="px-4 py-3.5">{new Date(inc.created_at).toLocaleString('es-ES')}</td>
-                          <td className="px-4 py-3.5 font-bold text-rose-600">{inc.incident_type}</td>
-                          <td className="px-4 py-3.5">{inc.missing_photo ? '🔴 SÍ' : '🟢 NO'}</td>
-                          <td className="px-4 py-3.5">{inc.missing_gps ? '🔴 SÍ' : '🟢 NO'}</td>
-                          <td className="px-4 py-3.5 text-brand-subtext max-w-[200px] truncate" title={inc.description}>
-                            {inc.description}
-                          </td>
-                          <td className="px-4 py-3.5 text-right">
-                            <div className="flex justify-end">
-                              {!isResolved ? (
-                                <button
-                                  onClick={() => {
-                                    setResolveIncidentId(inc.id);
-                                    setIncidentJustification('');
-                                    setShowResolveIncidentModal(true);
-                                  }}
-                                  className="p-1.5 text-brand-maroon hover:bg-brand-cream/50 rounded-lg transition-all"
-                                  title="Justificar Incidencia"
-                                >
-                                  <FileCheck className="w-4 h-4" />
-                                </button>
-                              ) : (
-                                <span className="text-emerald-600 font-bold text-xs flex items-center gap-1 justify-end"><Check className="w-3.5 h-3.5" /> Resuelto</span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[840px] text-left border-collapse">
+                    <thead>
+                      <tr className="bg-brand-cream/50 text-[10px] uppercase font-bold tracking-wider text-brand-subtext border-b border-brand-border">
+                        <th className="px-4 py-3">Empleado</th>
+                        <th className="px-4 py-3">Fecha/Hora</th>
+                        <th className="px-4 py-3">Tipo de Incidencia</th>
+                        <th className="px-4 py-3">Falta Foto</th>
+                        <th className="px-4 py-3">Falta GPS</th>
+                        <th className="px-4 py-3">Detalle / Justificación</th>
+                        <th className="px-4 py-3 text-right">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-brand-border text-xs font-semibold">
+                      {companyIncidents.map(inc => {
+                        const emp = companyEmployees.find(e => e.id === inc.employee_id);
+                        const isResolved = inc.description && inc.description.includes('JUSTIFICADO');
+                        
+                        return (
+                          <tr key={inc.id} className="hover:bg-brand-cream/10">
+                            <td className="px-4 py-3.5">
+                              <p className="font-bold">{emp?.full_name}</p>
+                              <p className="text-[10px] text-brand-subtext">{emp?.employee_code}</p>
+                            </td>
+                            <td className="px-4 py-3.5">{new Date(inc.created_at).toLocaleString('es-ES')}</td>
+                            <td className="px-4 py-3.5 font-bold text-rose-600">{inc.incident_type}</td>
+                            <td className="px-4 py-3.5">{inc.missing_photo ? '🔴 SÍ' : '🟢 NO'}</td>
+                            <td className="px-4 py-3.5">{inc.missing_gps ? '🔴 SÍ' : '🟢 NO'}</td>
+                            <td className="px-4 py-3.5 text-brand-subtext max-w-[200px] truncate" title={inc.description}>
+                              {inc.description}
+                            </td>
+                            <td className="px-4 py-3.5 text-right">
+                              <div className="flex justify-end">
+                                {!isResolved ? (
+                                  <button
+                                    onClick={() => {
+                                      setResolveIncidentId(inc.id);
+                                      setIncidentJustification('');
+                                      setShowResolveIncidentModal(true);
+                                    }}
+                                    className="p-1.5 text-brand-maroon hover:bg-brand-cream/50 rounded-lg transition-all"
+                                    title="Justificar Incidencia"
+                                  >
+                                    <FileCheck className="w-4 h-4" />
+                                  </button>
+                                ) : (
+                                  <span className="text-emerald-600 font-bold text-xs flex items-center gap-1 justify-end"><Check className="w-3.5 h-3.5" /> Resuelto</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>
@@ -2106,7 +2112,8 @@ export const AdminPage: React.FC = () => {
             <h1 className="text-2xl font-black text-brand-maroon">LOGS DE AUDITORÍA</h1>
 
             <div className="bg-brand-card rounded-2xl border border-brand-border overflow-hidden shadow-sm">
-              <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[760px] text-left border-collapse">
                 <thead>
                   <tr className="bg-brand-cream/50 text-[10px] uppercase font-bold tracking-wider text-brand-subtext border-b border-brand-border">
                     <th className="px-4 py-3">Entidad</th>
@@ -2129,7 +2136,8 @@ export const AdminPage: React.FC = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           </div>
         )}
