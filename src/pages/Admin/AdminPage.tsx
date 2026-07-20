@@ -80,6 +80,15 @@ export const AdminPage: React.FC = () => {
   const companyId = isSuperadmin ? selectedCompanyId : (currentCompany?.id || '');
   const activeCompany = companies.find(c => c.id === companyId);
 
+  React.useEffect(() => {
+    if (!isSuperadmin) return;
+    if (companies.length === 0) return;
+    const selectedExists = companies.some(c => c.id === selectedCompanyId);
+    if (!selectedCompanyId || !selectedExists) {
+      setSelectedCompanyId(companies[0].id);
+    }
+  }, [isSuperadmin, companies, selectedCompanyId]);
+
   const [activeTab, setActiveTab] = useState<
     'companies' | 'dashboard' | 'employees' | 'centers' | 'devices' | 'entries' | 'requests' | 'incidents' | 'audit' | 'reports' | 'settings' | 'settings_global' | 'calendars' | 'overtime'
   >(isSuperadmin ? 'companies' : 'dashboard');
@@ -1396,7 +1405,8 @@ export const AdminPage: React.FC = () => {
             </div>
 
             <div className="bg-brand-card rounded-2xl border border-brand-border overflow-hidden shadow-sm">
-              <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left border-collapse">
                 <thead>
                   <tr className="bg-brand-cream/50 text-[10px] uppercase font-bold tracking-wider text-brand-subtext border-b border-brand-border">
                     <th className="px-4 py-3">Cód</th>
@@ -1478,7 +1488,8 @@ export const AdminPage: React.FC = () => {
                     );
                   })}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           </div>
         )}

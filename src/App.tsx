@@ -3,6 +3,7 @@ import { useApp } from './context/AppContext';
 import { PortalPage } from './pages/Portal/PortalPage';
 import { EmployeePage } from './pages/Employee/EmployeePage';
 import { AdminPage } from './pages/Admin/AdminPage';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 function App() {
   const { currentUser, authLoading } = useApp();
@@ -15,7 +16,11 @@ function App() {
     <div className="flex-1 flex flex-col min-h-screen bg-brand-cream/10">
       {currentUser.role === 'none' && <PortalPage />}
       {currentUser.role === 'employee' && <EmployeePage />}
-      {(currentUser.role === 'company_admin' || currentUser.role === 'superadmin') && <AdminPage />}
+      {(currentUser.role === 'company_admin' || currentUser.role === 'superadmin') && (
+        <ErrorBoundary>
+          <AdminPage />
+        </ErrorBoundary>
+      )}
     </div>
   );
 }
