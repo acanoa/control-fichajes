@@ -15,6 +15,8 @@ Primera versión organizada y preparada para crecer de Gestión de Fichajes.
 - Leaflet empaquetado localmente y panel administrativo cargado bajo demanda.
 - Exportación PDF separada del bundle principal.
 - Gestión homogénea de errores y logs con redacción de datos sensibles.
+- Versión visible en la esquina inferior derecha de toda la aplicación.
+- Historial de fichajes ordenado del más reciente al más antiguo y filtrable por empleado.
 
 ### Base de datos y seguridad
 
