@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { useApp } from '../../context/AppContext';
-import { Company, Profile, GlobalSetting } from '../../types';
+import { useApp } from '../../context/useApp';
+import { Company, Profile } from '../../types';
 import { 
-  Building, Shield, Users, Clock, AlertTriangle, 
-  Settings, LogOut, Check, X, Plus, ShieldAlert, Trash2, Key, Video,
+  Building, Users, Clock, AlertTriangle,
+  Settings, LogOut, X, Plus, ShieldAlert, Trash2, Video,
   Pencil, UserCheck, Lock, Unlock, Eye, Compass
 } from 'lucide-react';
 
@@ -18,9 +18,14 @@ export const SuperAdminPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'companies' | 'all_entries' | 'all_incidents' | 'all_audit' | 'settings' | 'all_employees' | 'all_centers' | 'all_devices'>('companies');
 
+  const refreshDataRef = React.useRef(refreshData);
+  React.useEffect(() => {
+    refreshDataRef.current = refreshData;
+  }, [refreshData]);
+
   // Refresh data on sidebar tab switch
   React.useEffect(() => {
-    refreshData();
+    void refreshDataRef.current();
   }, [activeTab]);
 
   // Add / Edit Company Form

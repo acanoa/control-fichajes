@@ -9,6 +9,13 @@ Aplicación React/Vite conectada a Supabase. La autorización real se aplica en 
 3. Aplica, con un usuario propietario de la base de datos, las migraciones de `supabase/migrations` antes de publicar el frontend.
 4. Ejecuta `npm install`, `npm run lint` y `npm run build`.
 
+Antes de entregar un cambio ejecuta también `npm run typecheck` y `npm test`.
+La arquitectura, el modelo de datos y la operación están documentados en
+[`docs/architecture.md`](docs/architecture.md),
+[`docs/database.md`](docs/database.md),
+[`docs/deployment.md`](docs/deployment.md) y
+[`docs/backup-and-restore.md`](docs/backup-and-restore.md).
+
 Nunca coloques `SUPABASE_SERVICE_ROLE_KEY`, contraseñas de PostgreSQL ni URLs administrativas en el directorio o entorno de compilación del frontend.
 
 ## Modelo de seguridad

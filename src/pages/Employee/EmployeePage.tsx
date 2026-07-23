@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useApp } from '../../context/AppContext';
+import { useApp } from '../../context/useApp';
 import { EntryType } from '../../types';
 import { Clock, LogOut, CheckCircle2, History, AlertTriangle, FileEdit, PlusCircle, Compass, Camera, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -130,7 +130,7 @@ export const EmployeePage: React.FC = () => {
           video.play();
         }
       }, 500);
-    } catch (err) {
+    } catch {
       // Fallback: camera error but PRD says let employee complete the punch with an incident
       registerPunchAction(type, null, 'Permiso de cámara denegado', reportIncident ? incidentComment : undefined);
     }
@@ -191,7 +191,7 @@ export const EmployeePage: React.FC = () => {
     }
 
     try {
-      const entry = await registerPunch(type, photo, lat, lng, camErr, gpsErr, manualReason);
+      await registerPunch(type, photo, lat, lng, camErr, gpsErr, manualReason);
       
       // Success Confetti!
       confetti({
