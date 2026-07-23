@@ -1,9 +1,13 @@
-import React from 'react';
-import { useApp } from './context/AppContext';
+import React, { Suspense, lazy } from 'react';
+import { useApp } from './context/useApp';
 import { PortalPage } from './pages/Portal/PortalPage';
 import { EmployeePage } from './pages/Employee/EmployeePage';
-import { AdminPage } from './pages/Admin/AdminPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
+
+const AdminPage = lazy(async () => {
+  const module = await import('./pages/Admin/AdminPage');
+  return { default: module.AdminPage };
+});
 
 function App() {
   const { currentUser, authLoading } = useApp();
@@ -18,7 +22,9 @@ function App() {
       {currentUser.role === 'employee' && <EmployeePage />}
       {(currentUser.role === 'company_admin' || currentUser.role === 'superadmin') && (
         <ErrorBoundary>
-          <AdminPage />
+          <Suspense fallback={<div className="min-h-screen grid place-items-center">Cargando panel…</div>}>
+            <AdminPage />
+          </Suspense>
         </ErrorBoundary>
       )}
     </div>

@@ -1,17 +1,21 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Company, WorkCenter, Profile, Employee, 
   AuthorizedDevice, TimeEntry, TimeEntryIncident, 
   CorrectionRequest, AuditLog, EntryType, 
-  TimeEntrySource, TimeEntryStatus, EmployeeWorkCenter,
+  TimeEntrySource, EmployeeWorkCenter,
   LaborCalendar, CalendarDayTypeSetting, CalendarDay,
   CalendarImportRun, CalendarImportConflict, EmployeeWeeklyContract,
   DailyWorkSummary, WeeklyWorkSummary, OvertimeAdjustment
 } from '../types';
 import { CheckCircle2, AlertTriangle, Info } from 'lucide-react';
-import { supabase } from '../services/supabase';
+import { supabase } from '../integrations/supabase/client';
+import { loadAdminSnapshot } from '../repositories/applicationRepository';
+import { logger } from '../lib/logger';
+import { listDeviceRegistrationOptions } from '../features/devices/services/deviceRegistrationService';
+import { AppContext } from './AppContextDefinition';
 
-interface AppContextType {
+export interface AppContextType {
   // Master lists
   companies: Company[];
   workCenters: WorkCenter[];
@@ -103,8 +107,6 @@ interface AppContextType {
   addOvertimeAdjustment: (weeklySummaryId: string, employeeId: string, minutes: number, reason: string) => Promise<void>;
 }
 
-const AppContext = createContext<AppContextType | undefined>(undefined);
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Custom Global Alert Dialog State
   const [alertState, setAlertState] = useState<{
@@ -160,73 +162,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshData = async (): Promise<void> => {
     try {
-      console.log("Refreshing data from Supabase...");
-      
-      const { data: dbComps } = await supabase.from('companies').select('*');
-      if (dbComps) rawSetCompanies(dbComps);
-
-      const { data: dbWcs } = await supabase.from('work_centers').select('*');
-      if (dbWcs) setWorkCenters(dbWcs);
-
-      const { data: dbProfs } = await supabase.from('profiles').select('*');
-      if (dbProfs) rawSetProfiles(dbProfs);
-
-      const { data: dbEmps } = await supabase
-        .from('employees')
-        .select('id, company_id, dni, full_name, employee_counter, employee_code, email, phone, job_title, department, hire_date, termination_date, status, created_at, updated_at');
-      if (dbEmps) setEmployees(dbEmps);
-
-      const { data: dbDevs } = await supabase
-        .from('authorized_devices')
-        .select('id, company_id, work_center_id, name, status, camera_validation_status, camera_validated_at, camera_validation_error, camera_validated_by, registered_at, last_used_at, created_at, updated_at');
-      if (dbDevs) setDevices(dbDevs);
-
-      const { data: dbEntries } = await supabase.from('time_entries').select('*');
-      if (dbEntries) rawSetTimeEntries(dbEntries);
-
-      const { data: dbIncidents } = await supabase.from('time_entry_incidents').select('*');
-      if (dbIncidents) setIncidents(dbIncidents);
-
-      const { data: dbRequests } = await supabase.from('correction_requests').select('*');
-      if (dbRequests) setRequests(dbRequests);
-
-      const { data: dbLogs } = await supabase.from('audit_logs').select('*');
-      if (dbLogs) setAuditLogs(dbLogs);
-
-      const { data: dbEwcs } = await supabase.from('employee_work_centers').select('*');
-      if (dbEwcs) rawSetEmployeeWorkCenters(dbEwcs);
-
-      // Load new tables
-      const { data: dbCalendars } = await supabase.from('labor_calendars').select('*');
-      if (dbCalendars) rawSetLaborCalendars(dbCalendars);
-
-      const { data: dbDayTypes } = await supabase.from('calendar_day_type_settings').select('*');
-      if (dbDayTypes) rawSetDayTypeSettings(dbDayTypes);
-
-      const { data: dbCalendarDays } = await supabase.from('calendar_days').select('*');
-      if (dbCalendarDays) rawSetCalendarDays(dbCalendarDays);
-
-      const { data: dbImportRuns } = await supabase.from('calendar_import_runs').select('*');
-      if (dbImportRuns) rawSetCalendarImportRuns(dbImportRuns);
-
-      const { data: dbConflicts } = await supabase.from('calendar_import_conflicts').select('*');
-      if (dbConflicts) rawSetCalendarImportConflicts(dbConflicts);
-
-      const { data: dbWeeklyContracts } = await supabase.from('employee_weekly_contracts').select('*');
-      if (dbWeeklyContracts) rawSetEmployeeWeeklyContracts(dbWeeklyContracts);
-
-      const { data: dbDailySummaries } = await supabase.from('daily_work_summaries').select('*');
-      if (dbDailySummaries) rawSetDailyWorkSummaries(dbDailySummaries);
-
-      const { data: dbWeeklySummaries } = await supabase.from('weekly_work_summaries').select('*');
-      if (dbWeeklySummaries) rawSetWeeklyWorkSummaries(dbWeeklySummaries);
-
-      const { data: dbAdjustments } = await supabase.from('overtime_adjustments').select('*');
-      if (dbAdjustments) rawSetOvertimeAdjustments(dbAdjustments);
-
-      console.log("Supabase database load/refresh completed successfully!");
+      const snapshot = await loadAdminSnapshot();
+      rawSetCompanies(snapshot.companies);
+      setWorkCenters(snapshot.workCenters);
+      rawSetProfiles(snapshot.profiles);
+      setEmployees(snapshot.employees);
+      setDevices(snapshot.devices);
+      rawSetTimeEntries(snapshot.timeEntries);
+      setIncidents(snapshot.incidents);
+      setRequests(snapshot.requests);
+      setAuditLogs(snapshot.auditLogs);
+      rawSetEmployeeWorkCenters(snapshot.employeeWorkCenters);
+      rawSetLaborCalendars(snapshot.laborCalendars);
+      rawSetDayTypeSettings(snapshot.dayTypeSettings);
+      rawSetCalendarDays(snapshot.calendarDays);
+      rawSetCalendarImportRuns(snapshot.calendarImportRuns);
+      rawSetCalendarImportConflicts(snapshot.calendarImportConflicts);
+      rawSetEmployeeWeeklyContracts(snapshot.employeeWeeklyContracts);
+      rawSetDailyWorkSummaries(snapshot.dailyWorkSummaries);
+      rawSetWeeklyWorkSummaries(snapshot.weeklyWorkSummaries);
+      rawSetOvertimeAdjustments(snapshot.overtimeAdjustments);
+      logger.info('Datos administrativos actualizados.');
     } catch (err) {
-      console.warn("Could not load data from Supabase. Using localStorage fallback:", err);
+      logger.error('No se pudieron actualizar los datos administrativos.', err);
+      throw err;
     }
   };
 
@@ -572,16 +531,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const loadPublicRegistrationOptions = async () => {
-      const { data, error } = await supabase.rpc('list_device_registration_options');
-      if (error || !data) return;
+      const options = await listDeviceRegistrationOptions();
       if (active) {
-        rawSetCompanies((data.companies || []) as Company[]);
-        setWorkCenters((data.work_centers || []) as WorkCenter[]);
+        rawSetCompanies(options.companies);
+        setWorkCenters(options.workCenters);
       }
     };
 
     Promise.all([restoreAdminSession(), validateTerminal(), loadPublicRegistrationOptions()])
-      .catch(error => console.error('Error restaurando la sesión segura:', error))
+      .catch(error => logger.error('Error restaurando la sesión segura.', error))
       .finally(() => active && setAuthLoading(false));
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -2314,10 +2272,4 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       )}
     </AppContext.Provider>
   );
-};
-
-export const useApp = () => {
-  const context = useContext(AppContext);
-  if (!context) throw new Error('useApp must be used within AppProvider');
-  return context;
 };

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useApp } from '../../context/AppContext';
-import { EntryType, Employee, WorkCenter, AuthorizedDevice, TimeEntry, CorrectionRequest, TimeEntryIncident, Company, Profile, CalendarDay, AuditLog, CalendarImportConflict, CalendarDayTypeSetting, LaborCalendar, EmployeeWeeklyContract } from '../../types';
+import { useApp } from '../../context/useApp';
+import { EntryType, Employee, WorkCenter, AuthorizedDevice, TimeEntry, Company, Profile, CalendarDay, LaborCalendar } from '../../types';
 import { 
   Users, Building, Video, Clock, AlertTriangle, 
   Settings, LogOut, Check, X, FileSpreadsheet, 
@@ -8,8 +8,14 @@ import {
   Pencil, Ban, Power, FileCheck, UserPlus, Lock, Unlock,
   Compass, MapPin, Map
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import { supabase } from '../../services/supabase';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import markerIconUrl from 'leaflet/dist/images/marker-icon.png';
+import markerIconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png';
+import markerShadowUrl from 'leaflet/dist/images/marker-shadow.png';
+import { deleteDayType } from '../../repositories/calendarRepository';
+import { geocodeAddress } from '../../integrations/geocoding/nominatim';
+import { logger } from '../../lib/logger';
 
 // Helper utilities for local UUID operations
 const toUUID = (id: string, prefix = '00000000'): string => {
@@ -60,7 +66,7 @@ export const AdminPage: React.FC = () => {
     companies, setCompanies,
     profiles, setProfiles,
     employees, workCenters, devices, timeEntries,
-    incidents, requests, auditLogs, setAuditLogs, employeeWorkCenters,
+    incidents, requests, auditLogs, employeeWorkCenters,
     addEmployee, updateEmployee, changeEmployeePin,
     addWorkCenter, updateWorkCenter, deleteWorkCenter, updateDevice, resolveIncident,
     approveDeviceRegistration, deauthorizeDevice, deleteDevice, resolveRequest, deleteOldEntries, updateCompanySettings,
@@ -93,27 +99,15 @@ export const AdminPage: React.FC = () => {
     'companies' | 'dashboard' | 'employees' | 'centers' | 'devices' | 'entries' | 'requests' | 'incidents' | 'audit' | 'reports' | 'settings' | 'settings_global' | 'calendars' | 'overtime'
   >(isSuperadmin ? 'companies' : 'dashboard');
 
+  const refreshDataRef = React.useRef(refreshData);
+  React.useEffect(() => {
+    refreshDataRef.current = refreshData;
+  }, [refreshData]);
+
   // Refresh data on sidebar tab switch
   React.useEffect(() => {
-    refreshData();
+    void refreshDataRef.current();
   }, [activeTab]);
-
-  // Load Leaflet CSS and JS dynamically
-  React.useEffect(() => {
-    if (!document.getElementById('leaflet-css')) {
-      const link = document.createElement('link');
-      link.id = 'leaflet-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-    }
-    if (!document.getElementById('leaflet-js')) {
-      const script = document.createElement('script');
-      script.id = 'leaflet-js';
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      document.head.appendChild(script);
-    }
-  }, []);
 
   // Add/Edit Company Form State (Superadmin)
   const [showCompanyModal, setShowCompanyModal] = useState(false);
@@ -241,11 +235,11 @@ export const AdminPage: React.FC = () => {
   // NEW SYSTEM UI STATES: CALENDARS & OVERTIME
   // ==========================================
   const {
-    laborCalendars, dayTypeSettings, calendarDays, calendarImportRuns, calendarImportConflicts,
-    employeeWeeklyContracts, dailyWorkSummaries, weeklyWorkSummaries, overtimeAdjustments,
+    laborCalendars, dayTypeSettings, calendarDays, calendarImportConflicts,
+    employeeWeeklyContracts, dailyWorkSummaries, weeklyWorkSummaries,
     addWeeklyContract, updateWeeklyContract, deleteWeeklyContract,
     addLaborCalendar, updateLaborCalendar, importHolidays, resolveConflict, addOvertimeAdjustment,
-    recalculateEmployeeHours, recalculateCompanyHours
+    recalculateCompanyHours
   } = useApp();
 
   const [selectedCalendarCenterId, setSelectedCalendarCenterId] = useState<string>('');
@@ -259,7 +253,6 @@ export const AdminPage: React.FC = () => {
   const [dayToEditName, setDayToEditName] = useState('');
   const [dayToEditTypeId, setDayToEditTypeId] = useState('');
   const [dayToEditNotes, setDayToEditNotes] = useState('');
-  const [dayToEditReason, setDayToEditReason] = useState('');
 
   // Day Type Setting CRUD modal
   const [showDayTypeModal, setShowDayTypeModal] = useState(false);
@@ -607,7 +600,6 @@ export const AdminPage: React.FC = () => {
 
       showAlert('Día actualizado correctamente en el calendario.', 'success');
       setShowDayEditModal(false);
-      setDayToEditReason('');
 
       // Cascade recalculate company hours
       setTimeout(() => recalculateCompanyHours(companyId), 500);
@@ -734,20 +726,7 @@ export const AdminPage: React.FC = () => {
         adjustmentReasonText
       );
 
-      // Audit Log for Overtime Adjustment
-      const log: AuditLog = {
-        id: safeUUID(),
-        company_id: companyId,
-        entity_type: 'overtime_adjustments',
-        entity_id: adjustmentTargetSummaryId,
-        action: 'add_adjustment',
-        new_values: { adjustment_minutes: minutes, reason: adjustmentReasonText },
-        reason: adjustmentReasonText,
-        performed_by: currentUser.profile?.id,
-        performed_at: new Date().toISOString()
-      };
-      setAuditLogs(prev => [...prev, log]);
-      supabase.from('audit_logs').insert(log).then();
+      await refreshData();
 
       showAlert('Ajuste de horas extra guardado correctamente.', 'success');
       setShowAdjustmentModal(false);
@@ -970,6 +949,7 @@ export const AdminPage: React.FC = () => {
       initialLng = Number(deviceLng);
     }
 
+    mapInitialPositionRef.current = [initialLat, initialLng];
     setMapPickerLat(initialLat);
     setMapPickerLng(initialLng);
     setMapSearchText('');
@@ -977,8 +957,9 @@ export const AdminPage: React.FC = () => {
   };
 
   // Leaflet Map Picker Initializer
-  const mapRef = React.useRef<any>(null);
-  const markerRef = React.useRef<any>(null);
+  const mapRef = React.useRef<L.Map | null>(null);
+  const markerRef = React.useRef<L.Marker | null>(null);
+  const mapInitialPositionRef = React.useRef<[number, number]>([40.416775, -3.703790]);
 
   React.useEffect(() => {
     if (!showMapPickerModal) {
@@ -992,28 +973,26 @@ export const AdminPage: React.FC = () => {
 
     const timer = setTimeout(() => {
       const mapEl = document.getElementById('leaflet-map-picker');
-      if (!mapEl || !(window as any).L) return;
+      if (!mapEl) return;
 
-      const L = (window as any).L;
-
-      const map = L.map('leaflet-map-picker').setView([mapPickerLat, mapPickerLng], 15);
+      const [initialLat, initialLng] = mapInitialPositionRef.current;
+      const map = L.map('leaflet-map-picker').setView([initialLat, initialLng], 15);
       mapRef.current = map;
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors'
       }).addTo(map);
 
-      // Solve Leaflet image paths in production by using direct unpkg URLs
       const defaultIcon = L.icon({
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconUrl: markerIconUrl,
+        iconRetinaUrl: markerIconRetinaUrl,
+        shadowUrl: markerShadowUrl,
         iconSize: [25, 41],
         iconAnchor: [12, 41],
         shadowSize: [41, 41]
       });
 
-      const marker = L.marker([mapPickerLat, mapPickerLng], { 
+      const marker = L.marker([initialLat, initialLng], {
         draggable: true,
         icon: defaultIcon
       }).addTo(map);
@@ -1025,7 +1004,7 @@ export const AdminPage: React.FC = () => {
         setMapPickerLng(pos.lng);
       });
 
-      map.on('click', (e: any) => {
+      map.on('click', (e: L.LeafletMouseEvent) => {
         marker.setLatLng(e.latlng);
         setMapPickerLat(e.latlng.lat);
         setMapPickerLng(e.latlng.lng);
@@ -1246,7 +1225,8 @@ export const AdminPage: React.FC = () => {
     downloadCsv(exportRows, `detalle_registros_${activeCompany?.commercial_name || 'empresa'}.csv`);
   };
 
-  const downloadPDF = () => {
+  const downloadPDF = async () => {
+    const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ orientation: 'landscape' });
     doc.setFont('Helvetica', 'bold');
     doc.text(`DETALLE DE REGISTROS - ${(activeCompany?.commercial_name || 'empresa').toUpperCase()}`, 14, 16);
@@ -2642,7 +2622,6 @@ export const AdminPage: React.FC = () => {
                                       setDayToEditTypeId(defaultType?.id || '');
                                       setDayToEditNotes('');
                                     }
-                                    setDayToEditReason('');
                                     setShowDayEditModal(true);
                                   }}
                                   style={{ backgroundColor: cellColor || undefined }}
@@ -2713,11 +2692,16 @@ export const AdminPage: React.FC = () => {
                           </div>
                           {!s.is_system_type && (
                             <button
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.stopPropagation();
-                                setDayTypeSettings(prev => prev.filter(item => item.id !== s.id));
-                                supabase.from('calendar_day_type_settings').delete().eq('id', s.id).then();
-                                showAlert('Tipo de día eliminado correctamente.', 'success');
+                                try {
+                                  await deleteDayType(s.id);
+                                  setDayTypeSettings(prev => prev.filter(item => item.id !== s.id));
+                                  showAlert('Tipo de día eliminado correctamente.', 'success');
+                                } catch (error) {
+                                  logger.error('Error eliminando el tipo de día.', error, { dayTypeId: s.id });
+                                  showAlert('No se pudo eliminar el tipo de día.', 'error');
+                                }
                               }}
                               className="text-red-500 hover:text-red-700 p-1"
                             >
@@ -2832,7 +2816,8 @@ export const AdminPage: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    const { jsPDF } = await import('jspdf');
                     const doc = new jsPDF();
                     doc.setFont('helvetica', 'bold');
                     doc.text('REPORTE DE HORAS EXTRA Y CÓMPUTO HORARIO', 15, 15);
@@ -3027,7 +3012,6 @@ export const AdminPage: React.FC = () => {
             {overtimeViewMode === 'monthly' && (
               <div className="space-y-6">
                 {selectedEmployeeId ? (() => {
-                  const emp = employees.find(e => e.id === selectedEmployeeId);
                   const empContracts = employeeWeeklyContracts.filter(c => c.employee_id === selectedEmployeeId);
                   
                   return (
@@ -3180,7 +3164,7 @@ export const AdminPage: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-brand-border text-brand-text">
-                      {companyEmployees.map((emp, idx) => {
+                      {companyEmployees.map((emp) => {
                         const empSummaries = weeklyWorkSummaries.filter(s => s.employee_id === emp.id);
                         const totalReales = empSummaries.reduce((sum, item) => sum + item.actual_worked_minutes, 0);
                         const totalPonderadas = empSummaries.reduce((sum, item) => sum + item.weighted_worked_minutes, 0);
@@ -4865,12 +4849,10 @@ export const AdminPage: React.FC = () => {
                   e.preventDefault();
                   if (!mapSearchText.trim()) return;
                   try {
-                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(mapSearchText)}`);
-                    const data = await res.json();
-                    if (data && data.length > 0) {
-                      const first = data[0];
-                      const lat = parseFloat(first.lat);
-                      const lng = parseFloat(first.lon);
+                    const location = await geocodeAddress(mapSearchText);
+                    if (location) {
+                      const lat = location.latitude;
+                      const lng = location.longitude;
                       setMapPickerLat(lat);
                       setMapPickerLng(lng);
                       if (mapRef.current) {
@@ -4883,7 +4865,7 @@ export const AdminPage: React.FC = () => {
                       showAlert('No se encontraron resultados para la dirección buscada.', 'error');
                     }
                   } catch (err) {
-                    console.error("Geocoding error:", err);
+                    logger.error('Error en la geocodificación.', err);
                     showAlert('Error al buscar la dirección.', 'error');
                   }
                 }}

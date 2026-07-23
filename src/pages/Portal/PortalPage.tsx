@@ -1,7 +1,8 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { useApp } from '../../context/AppContext';
-import { Key, Shield, Building, User, Video, AlertTriangle } from 'lucide-react';
-import { supabase } from '../../services/supabase';
+import { useApp } from '../../context/useApp';
+import { Shield, Building, User, Video, AlertTriangle } from 'lucide-react';
+import { listDeviceRegistrationOptions } from '../../features/devices/services/deviceRegistrationService';
+import { logger } from '../../lib/logger';
 
 export const PortalPage: React.FC = () => {
   const { 
@@ -28,7 +29,6 @@ export const PortalPage: React.FC = () => {
   const [regCenter, setRegCenter] = useState('');
   const [cameraTestStatus, setCameraTestStatus] = useState<'idle' | 'testing' | 'success' | 'failed'>('idle');
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [cameraImg, setCameraImg] = useState<string | null>(null);
   const [regError, setRegError] = useState('');
   const [regSuccess, setRegSuccess] = useState('');
   const [registrationCompanies, setRegistrationCompanies] = useState(companies);
@@ -111,7 +111,7 @@ export const PortalPage: React.FC = () => {
           video.play();
         }
       }, 500);
-    } catch (err: any) {
+    } catch {
       setCameraTestStatus('failed');
       setRegError('No se pudo acceder a la cámara. Asegúrese de otorgar permisos de cámara en el navegador.');
     }
@@ -127,8 +127,6 @@ export const PortalPage: React.FC = () => {
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg');
-        setCameraImg(dataUrl);
 
         // Stop stream
         cameraStream.getTracks().forEach(track => track.stop());
@@ -138,7 +136,6 @@ export const PortalPage: React.FC = () => {
         setTimeout(() => {
           setCameraTestStatus('success');
           // In production, the test photo is uploaded and then deleted immediately
-          setCameraImg(null); // delete test photo immediately
         }, 1500);
       }
     }
@@ -173,11 +170,14 @@ export const PortalPage: React.FC = () => {
       if (activeTab !== 'register') return;
       if (registrationCompanies.length > 0 && registrationWorkCenters.length > 0) return;
 
-      const { data, error } = await supabase.rpc('list_device_registration_options');
-      if (!alive || error || !data) return;
-
-      setRegistrationCompanies((data.companies || []) as typeof companies);
-      setRegistrationWorkCenters((data.work_centers || []) as typeof workCenters);
+      try {
+        const options = await listDeviceRegistrationOptions();
+        if (!alive) return;
+        setRegistrationCompanies(options.companies);
+        setRegistrationWorkCenters(options.workCenters);
+      } catch (error) {
+        logger.error('No se pudieron cargar las opciones del terminal.', error);
+      }
     };
 
     void loadRegistrationOptions();
