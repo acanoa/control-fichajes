@@ -87,7 +87,9 @@ environments:
     url: not_configured
     secret_store: deployment_platform
   production:
-    url: managed_externally
+    url: https://integraprocesos.es/apps/control-fichajes/
+    web_host: 192.168.2.176
+    asset_base_path: /apps/control-fichajes/
     secret_store: deployment_platform
     approval_required: true
 

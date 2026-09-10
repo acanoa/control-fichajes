@@ -15,6 +15,15 @@ npm run build
 Publicar únicamente el contenido de `dist/`. `deploy-package/` es un artefacto
 local histórico no versionado y no es la fuente de verdad.
 
+Producción: `https://integraprocesos.es/apps/control-fichajes/`, servida por
+Nginx en `192.168.2.176` detrás de Cloudflare. El build fija la base de recursos
+en `/apps/control-fichajes/`; el servidor de desarrollo conserva `/`.
+Publicar el contenido de `dist/` en el directorio que Nginx tenga asignado a esa
+ruta, conservando una copia de la versión anterior. No sustituir la raíz de la
+web Integra Procesos. Verificar el HTML y sus recursos JavaScript/CSS tanto en
+el origen como en la URL pública. Un fallo de actualización puede dejar la
+versión anterior en servicio aunque `main` ya contenga el cambio.
+
 ## Variables
 
 El build del navegador sólo admite:
