@@ -1,0 +1,191 @@
+schema_version: 1
+
+project:
+  name: control-fichajes
+  purpose: Control horario multiempresa con terminales autorizados, fichajes, calendarios, correcciones y auditoría.
+  owner: acanoa
+  data_classification: confidential_employee_data
+  timezone: Europe/Madrid
+
+technology:
+  runtime: node
+  language: typescript
+  frontend: react_19_vite_8
+  backend: supabase_postgresql_rpc
+  package_manager: npm
+  strict_types: true
+
+commands:
+  install: npm ci
+  dev: npm run dev
+  lint: npm run lint
+  typecheck: npm run typecheck
+  test: npm test
+  build: npm run build
+
+development_server:
+  url: http://localhost:8080
+  host: 127.0.0.1
+  port: 8080
+  strict_port: true
+  stop_previous_project_server_before_start: true
+  verify_url_after_start: true
+  keep_running_for_user_review: true
+
+architecture:
+  presentation: src/pages_and_src/components
+  features: src/features
+  repositories: src/repositories
+  integrations: src/integrations
+  configuration: src/config
+  shared_libraries: src/lib
+  database_migrations: supabase/migrations
+  database_tests: supabase/tests
+  rules:
+    - Las páginas no construyen consultas complejas.
+    - Las operaciones sensibles y transaccionales se ejecutan mediante RPC de PostgreSQL.
+    - El acceso al entorno está centralizado y validado en src/config/env.ts.
+    - El cliente de Supabase se crea únicamente en src/integrations/supabase/client.ts.
+    - PostgreSQL es la autoridad para cálculos, autorización y auditoría crítica.
+
+repository:
+  provider: github
+  owner: acanoa
+  name: control-fichajes
+  remote: https://github.com/acanoa/control-fichajes.git
+  visibility: private
+  default_branch: main
+  merge_strategy: squash
+  protected_branch: recommended
+  required_checks:
+    - lint
+    - typecheck
+    - test
+    - build
+  authentication: global_ssh_ed25519
+  git_protocol: ssh
+  ssh_identity: user_profile_github_key
+  non_interactive_push:
+    verified: true
+    verified_at: 2026-07-24
+    method: git_push_dry_run_over_global_ssh
+    result: github_accepted_write_access
+  gh_cli:
+    status: authorized_in_windows_keyring
+    git_protocol: ssh
+    affects_git_push: false
+  secrets_location: github_actions_environments
+
+environments:
+  local:
+    url: http://localhost:8080
+    secret_store: local_ignored_env
+  test:
+    url: local_or_ci
+    secret_store: ci_secret_store
+  staging:
+    url: not_configured
+    secret_store: deployment_platform
+  production:
+    url: managed_externally
+    secret_store: deployment_platform
+    approval_required: true
+
+integrations:
+  supabase:
+    enabled: true
+    project_ref: managed_outside_repository
+    schema: Gestion_Fichajes
+    published_schemas:
+      - Gestion_Fichajes
+    public_url_env: VITE_SUPABASE_URL
+    public_anon_key_env: VITE_SUPABASE_ANON_KEY
+    service_role_env: SUPABASE_SERVICE_ROLE_KEY
+    database_url_env: DATABASE_URL
+    access_token_env: SUPABASE_ACCESS_TOKEN
+    types_file: src/integrations/supabase/database.types.ts
+    migrations_dir: supabase/migrations
+    tests_dir: supabase/tests
+    migration_execution: authorized_operator_change_window
+    browser_service_role_forbidden: true
+    rls_required: true
+    fixed_security_definer_search_path: true
+
+  n8n:
+    enabled: false
+    activation_requirements:
+      - Definir el caso de uso y el propietario de cada workflow.
+      - Usar N8N_API_KEY únicamente desde backend u operaciones.
+      - Firmar webhooks y hacer idempotentes las escrituras reintentables.
+    base_url_env: N8N_BASE_URL
+    api_key_env: N8N_API_KEY
+    webhook_base_url_env: N8N_WEBHOOK_BASE_URL
+    webhook_secret_env: N8N_WEBHOOK_SECRET
+
+  google:
+    enabled: false
+    activation_requirements:
+      - Elegir OAuth de usuario o identidad de servicio.
+      - Solicitar los scopes mínimos y documentar su finalidad.
+      - Configurar clientes y redirect URIs exactas por entorno.
+    client_id_env: GOOGLE_CLIENT_ID
+    client_secret_env: GOOGLE_CLIENT_SECRET
+    redirect_uri_env: GOOGLE_REDIRECT_URI
+    service_account_reference_env: GOOGLE_SERVICE_ACCOUNT_FILE
+    api_key_env: GOOGLE_API_KEY
+
+security:
+  secrets_committed: false
+  local_secret_file: .env
+  committed_variable_template: .env.example
+  browser_allowed_variables:
+    - VITE_SUPABASE_URL
+    - VITE_SUPABASE_ANON_KEY
+  browser_forbidden_variables:
+    - VITE_SUPABASE_SERVICE_ROLE_KEY
+    - DATABASE_URL
+    - N8N_API_KEY
+    - GOOGLE_CLIENT_SECRET
+  least_privilege: true
+  sensitive_log_redaction: true
+
+database:
+  authority: postgresql
+  application_schema: Gestion_Fichajes
+  auth_identity_source: auth.users
+  application_profiles_table: Gestion_Fichajes.profiles
+  qualified_object_names: true
+  exposed_tables_require_rls: true
+  internal_tables_client_access: false
+  sensitive_writes_via_rpc: true
+  terminal_identity:
+    browser_storage_key: cf_device_token
+    preserve_on_validation_error_or_null: true
+    visible_page_refresh_seconds: 15
+    admin_display: device_id_only
+  immutable_audit_for_critical_changes: true
+  generated_types_required: true
+  direct_anon_table_privileges: false
+  security_definer_search_path: pg_catalog_and_Gestion_Fichajes
+  backup_owner: supabase_central_operator
+  rpo: pending_business_decision
+  rto: pending_business_decision
+
+quality:
+  test_business_rules: true
+  test_authorization: true
+  test_migrations: true
+  require_clean_build: true
+  redact_sensitive_logs: true
+
+documentation:
+  architecture: docs/architecture.md
+  database: docs/database.md
+  deployment: docs/deployment.md
+  backup_restore: docs/backup-and-restore.md
+  production_changes: docs/production-change-request.md
+
+decisions_pending:
+  - Definir staging aislado antes de nuevas migraciones de alto riesgo.
+  - Acordar RPO y RTO del Supabase central.
+  - Activar n8n o Google únicamente cuando exista un caso de uso y scopes concretos.

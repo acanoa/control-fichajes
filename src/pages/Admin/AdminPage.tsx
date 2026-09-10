@@ -1772,7 +1772,7 @@ export const AdminPage: React.FC = () => {
                 <thead>
                   <tr className="bg-brand-cream/50 text-[10px] uppercase font-bold tracking-wider text-brand-subtext border-b border-brand-border">
                     <th className="px-4 py-3">Nombre</th>
-                    <th className="px-4 py-3">Token del dispositivo</th>
+                    <th className="px-4 py-3">ID del dispositivo</th>
                     <th className="px-4 py-3">Cámara Validada</th>
                     <th className="px-4 py-3">Centro Asignado</th>
                     <th className="px-4 py-3">Estado</th>
@@ -1783,7 +1783,7 @@ export const AdminPage: React.FC = () => {
                   {companyDevices.map(dev => (
                     <tr key={dev.id} className="hover:bg-brand-cream/10">
                       <td className="px-4 py-3.5">{dev.name}</td>
-                      <td className="px-4 py-3.5 font-mono">{dev.device_token}</td>
+                      <td className="px-4 py-3.5 font-mono">{dev.id}</td>
                       <td className="px-4 py-3.5">
                         <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
                           dev.camera_validation_status === 'validated' ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'
@@ -4826,7 +4826,7 @@ export const AdminPage: React.FC = () => {
               </p>
               <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
                 <p className="font-black text-red-900 text-sm">{deleteDeviceTarget.name}</p>
-                <p className="text-red-700 text-xs font-mono mt-0.5">{deleteDeviceTarget.device_token}</p>
+                <p className="text-red-700 text-xs font-mono mt-0.5">{deleteDeviceTarget.id}</p>
                 <p className="text-red-600 text-xs mt-1">
                   Centro: {workCenters.find(w => w.id === deleteDeviceTarget.work_center_id)?.name || 'N/D'} — Estado: {deleteDeviceTarget.status.toUpperCase()}
                 </p>

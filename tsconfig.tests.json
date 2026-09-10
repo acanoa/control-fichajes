@@ -13,6 +13,8 @@
   },
   "include": [
     "src/features/work-summaries/domain/workCalculations.ts",
-    "tests/workCalculations.test.ts"
+    "tests/workCalculations.test.ts",
+    "src/features/devices/services/terminalIdentity.ts",
+    "tests/terminalIdentity.test.ts"
   ]
 }

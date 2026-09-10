@@ -37,6 +37,20 @@ la única creación del cliente está en `src/integrations/supabase/client.ts`.
 
 ## Contratos y errores
 
+La identidad de un terminal se guarda en `localStorage` (`cf_device_token`),
+por navegador y origen (protocolo, dominio y puerto). El servicio
+`terminalIdentity.ts` comprueba el almacenamiento antes del registro y verifica
+la escritura del token. La validación nunca borra esa identidad por errores de
+red ni por un resultado nulo: un dispositivo, centro o empresa bloqueados pueden
+volver a activarse. La pantalla visible consulta cada 15 segundos y al recuperar
+foco, visibilidad o conexión para recibir la aprobación administrativa.
+Las operaciones de fichaje siguen autorizándose en el backend.
+
+El panel administrativo muestra el ID del dispositivo, no el token. La base
+guarda su huella SHA-256 y el campo histórico enmascarado. Si se pierden los datos
+del navegador, la huella no permite recuperar el token: debe registrarse y
+aprobarse una nueva identidad desde el terminal. No se autoriza por nombre.
+
 Las RPC son los contratos de backend para operaciones sensibles. Los
 repositorios encapsulan lecturas y escrituras directas sujetas a RLS.
 `AppError` normaliza fallos técnicos y `logger` redacta claves cuyo nombre

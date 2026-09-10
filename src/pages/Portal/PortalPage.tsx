@@ -6,7 +6,7 @@ import { logger } from '../../lib/logger';
 
 export const PortalPage: React.FC = () => {
   const { 
-    currentDevice, isDeviceAuthorized, authorizeDevice, 
+    currentDevice, isDeviceAuthorized, deviceValidationError, authorizeDevice,
     loginEmployee, loginAdmin, companies, workCenters 
   } = useApp();
 
@@ -209,11 +209,14 @@ export const PortalPage: React.FC = () => {
                 ? 'bg-blue-100 text-blue-800 border border-blue-200'
                 : 'bg-amber-100 text-amber-800 border border-amber-200'
           }`}>
-            {isDeviceAuthorized ? 'VALIDADO' : currentDevice?.status === 'pending' ? 'PENDIENTE APROBACIÓN' : 'PENDIENTE CÁMARA'}
+            {deviceValidationError ? 'SIN CONEXIÓN / ERROR' : isDeviceAuthorized ? 'VALIDADO' : !currentDevice ? 'SIN IDENTIFICAR' : currentDevice.status === 'pending' ? 'PENDIENTE APROBACIÓN' : 'NO AUTORIZADO'}
           </span>
         </div>
 
         {/* Navigation Tabs */}
+        {deviceValidationError && (
+          <p role="alert" className="px-4 py-3 text-xs text-amber-800 bg-amber-50">{deviceValidationError}</p>
+        )}
         <div className="flex border-b border-brand-border">
           <button
             onClick={() => setActiveTab('employee')}
@@ -262,7 +265,11 @@ export const PortalPage: React.FC = () => {
                   <div>
                     <h4 className="font-bold">Dispositivo no Autorizado</h4>
                     <p className="text-amber-800 text-xs mt-1">
-                      Este terminal no tiene la cámara validada o autorizada. Un administrador debe autorizar el dispositivo antes de poder registrar fichajes.
+                      {deviceValidationError || (!currentDevice
+                        ? 'No se reconoce este navegador. Abre la misma dirección y el mismo navegador donde registraste el dispositivo, sin modo incógnito. Si se borraron los datos del sitio, será necesario registrar y aprobar el terminal de nuevo.'
+                        : currentDevice.status === 'pending'
+                          ? 'La solicitud está pendiente de aprobación del administrador. Esta pantalla se actualizará automáticamente al aprobarla.'
+                          : 'El dispositivo requiere autorización y cámara validada. Consulta su estado con el administrador.')}
                     </p>
                   </div>
                 </div>

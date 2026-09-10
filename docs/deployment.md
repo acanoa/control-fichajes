@@ -53,6 +53,14 @@ debe coordinarse de forma central porque puede afectar a otras aplicaciones.
 
 ## Base de datos
 
+Para comprobar un terminal móvil, abrir siempre el mismo origen y navegador
+normal usados en su registro. Cambiar HTTP/HTTPS, dominio, puerto, navegador o
+borrar los datos del sitio separa o elimina su identificación local. Aprobar el
+terminal en administración y comprobar que pasa a validado en el móvil en un
+máximo aproximado de 15 segundos con conexión. Simular un fallo de red y verificar
+que al reconectar conserva su identificación. Nunca copiar tokens en incidencias
+ni introducir credenciales administrativas en el navegador del terminal.
+
 Las migraciones se revisan y aplican por un operador con una ventana de cambio.
 Este repositorio no las ejecuta durante el build. Ejecutar primero
 `supabase/tests/security_and_calculation.sql` en un entorno de ensayo

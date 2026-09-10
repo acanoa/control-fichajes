@@ -13,6 +13,7 @@ import { supabase } from '../integrations/supabase/client';
 import { loadAdminSnapshot } from '../repositories/applicationRepository';
 import { logger } from '../lib/logger';
 import { listDeviceRegistrationOptions } from '../features/devices/services/deviceRegistrationService';
+import { checkTerminalStorage, saveTerminalToken, validateStoredTerminal } from '../features/devices/services/terminalIdentity';
 import { AppContext } from './AppContextDefinition';
 
 export interface AppContextType {
@@ -66,6 +67,7 @@ export interface AppContextType {
   currentWorkCenter?: WorkCenter;
   currentDevice?: AuthorizedDevice; // Device token stored in localStorage
   isDeviceAuthorized: boolean;
+  deviceValidationError: string;
   authLoading: boolean;
 
   // Actions
@@ -481,6 +483,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentDevice, setCurrentDevice] = useState<AuthorizedDevice | undefined>();
   const [employeeSessionToken, setEmployeeSessionToken] = useState<string>();
   const [authLoading, setAuthLoading] = useState(true);
+  const [deviceValidationError, setDeviceValidationError] = useState('');
 
   const isDeviceAuthorized = !!currentDevice && currentDevice.status === 'active' && currentDevice.camera_validation_status === 'validated';
 
@@ -519,17 +522,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    const validateTerminal = async () => {
-      const token = localStorage.getItem('cf_device_token');
-      if (!token) return;
-      const { data, error } = await supabase.rpc('validate_device', { p_device_token: token });
-      if (error || !data) {
-        localStorage.removeItem('cf_device_token');
-        return;
-      }
-      setCurrentDevice(data as AuthorizedDevice);
-    };
-
     const loadPublicRegistrationOptions = async () => {
       const options = await listDeviceRegistrationOptions();
       if (active) {
@@ -538,7 +530,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    Promise.all([restoreAdminSession(), validateTerminal(), loadPublicRegistrationOptions()])
+    Promise.all([restoreAdminSession(), loadPublicRegistrationOptions()])
       .catch(error => logger.error('Error restaurando la sesión segura.', error))
       .finally(() => active && setAuthLoading(false));
 
@@ -555,8 +547,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    let checking = false;
+    const validateTerminal = async () => {
+      if (checking || document.visibilityState === 'hidden') return;
+      checking = true;
+      try {
+        const device = await validateStoredTerminal<AuthorizedDevice>(localStorage, async token => {
+          const { data, error } = await supabase.rpc('validate_device', { p_device_token: token });
+          return { data: data as AuthorizedDevice | null, error };
+        });
+        if (active) {
+          setCurrentDevice(device ?? undefined);
+          setDeviceValidationError('');
+        }
+      } catch (error) {
+        if (active) {
+          setDeviceValidationError(error instanceof Error ? error.message : 'No se pudo comprobar la autorización del dispositivo.');
+        }
+      } finally {
+        checking = false;
+      }
+    };
+    void validateTerminal();
+    const interval = window.setInterval(() => void validateTerminal(), 15_000);
+    window.addEventListener('online', validateTerminal);
+    window.addEventListener('focus', validateTerminal);
+    document.addEventListener('visibilitychange', validateTerminal);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener('online', validateTerminal);
+      window.removeEventListener('focus', validateTerminal);
+      document.removeEventListener('visibilitychange', validateTerminal);
+    };
+  }, [currentDevice?.id]);
+
   // Actions
   const authorizeDevice = async (name: string, companyId: string, workCenterId: string, cameraWorking: boolean): Promise<AuthorizedDevice> => {
+    checkTerminalStorage(localStorage);
     const { data, error } = await supabase.rpc('request_device_registration', {
       p_name: name.trim(),
       p_company_id: companyId,
@@ -566,7 +596,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (error || !data?.device || !data?.device_token) {
       throw new Error(error?.message || 'No se pudo registrar la solicitud del terminal.');
     }
-    localStorage.setItem('cf_device_token', data.device_token);
+    saveTerminalToken(localStorage, data.device_token);
+    setDeviceValidationError('');
     setCurrentDevice(data.device as AuthorizedDevice);
     return data.device as AuthorizedDevice;
   };
@@ -2215,7 +2246,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       weeklyWorkSummaries, setWeeklyWorkSummaries,
       overtimeAdjustments, setOvertimeAdjustments,
 
-      currentUser, currentCompany, currentWorkCenter, currentDevice, isDeviceAuthorized, authLoading,
+      currentUser, currentCompany, currentWorkCenter, currentDevice, isDeviceAuthorized, deviceValidationError, authLoading,
       authorizeDevice, approveDeviceRegistration, deauthorizeDevice, deleteDevice, loginEmployee, loginAdmin, logout, registerPunch,
       addEmployee, updateEmployee, changeEmployeePin, addWorkCenter, updateWorkCenter, deleteWorkCenter, updateDevice, resolveIncident, resolveRequest, submitRequest, deleteOldEntries, updateCompanySettings,
       showAlert, refreshData,

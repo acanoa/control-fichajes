@@ -531,7 +531,7 @@ export const SuperAdminPage: React.FC = () => {
                   <tr className="bg-brand-cream/50 text-[10px] uppercase font-bold tracking-wider text-brand-subtext border-b border-brand-border">
                     <th className="px-4 py-3">Empresa</th>
                     <th className="px-4 py-3">Nombre</th>
-                    <th className="px-4 py-3">Token</th>
+                    <th className="px-4 py-3">ID del dispositivo</th>
                     <th className="px-4 py-3">Cámara Validada</th>
                     <th className="px-4 py-3">Estado</th>
                   </tr>
@@ -543,7 +543,7 @@ export const SuperAdminPage: React.FC = () => {
                       <tr key={dev.id} className="hover:bg-brand-cream/10">
                         <td className="px-4 py-3.5 uppercase text-[9px] font-bold text-brand-subtext">{comp?.commercial_name}</td>
                         <td className="px-4 py-3.5">{dev.name}</td>
-                        <td className="px-4 py-3.5 font-mono">{dev.device_token}</td>
+                        <td className="px-4 py-3.5 font-mono">{dev.id}</td>
                         <td className="px-4 py-3.5 uppercase text-[9px] font-bold">{dev.camera_validation_status}</td>
                         <td className="px-4 py-3.5">
                           <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
