@@ -1,0 +1,18 @@
+.admin-button{padding:.6rem 1rem;border:1px solid #ddd;border-radius:.6rem;font-weight:600;cursor:pointer}
+.admin-button:disabled{opacity:.5;cursor:not-allowed}
+.admin-button-primary{background:#701a32;color:white}.admin-button-danger{background:#b91c1c;color:white}
+.admin-button-success{background:#d1fae5;color:#065f46}.admin-button-secondary{background:#f3f4f6;color:#374151}
+.admin-button-outline-primary{color:#701a32}.admin-button-outline-danger{color:#b91c1c}.admin-button-outline-secondary{color:#374151}
+.admin-button-small{padding:.3rem .6rem;font-size:.8rem}.admin-badge{padding:.2rem .5rem;border-radius:.4rem;font-size:.8rem}
+.admin-dialog{margin:auto;max-width:48rem;width:calc(100% - 2rem);max-height:90vh;padding:1.5rem;border:0;border-radius:1rem;overflow:auto}
+.admin-dialog::backdrop{background:#0008}
+.admin-panel .row{display:flex;flex-wrap:wrap;margin:-.4rem}.admin-panel .row>*{padding:.4rem;width:100%}
+@media(min-width:768px){.admin-panel .row>.col-md-6{width:50%}}
+.admin-panel .form-label{display:block;font-size:.85rem;font-weight:600;margin-bottom:.3rem}
+.admin-panel .form-control,.admin-panel .form-select{display:block;width:100%;padding:.6rem;border:1px solid #d1d5db;border-radius:.5rem;background:white;color:#111827}
+.admin-panel .d-flex{display:flex}.admin-panel .gap-2{gap:.5rem}.admin-panel .gap-3{gap:1rem}
+.admin-panel .justify-content-between{justify-content:space-between}.admin-panel .align-items-center{align-items:center}
+.admin-panel .mb-3{margin-bottom:1rem}.admin-panel .me-2{margin-right:.5rem}.admin-panel .h4{font-weight:700;font-size:1.25rem}
+.admin-panel .text-end{text-align:right}.admin-panel .text-muted{color:#6b7280}.admin-panel .table-responsive{overflow-x:auto}
+.admin-panel .table{width:100%;border-collapse:collapse}.admin-panel .table th,.admin-panel .table td{padding:.7rem;text-align:left;border-bottom:1px solid #e5e7eb}
+.admin-panel .alert-danger{padding:.75rem;margin-bottom:1rem;border-radius:.5rem;background:#fef2f2;color:#991b1b}

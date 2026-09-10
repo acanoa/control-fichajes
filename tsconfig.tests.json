@@ -17,6 +17,7 @@
     "tests/workCalculations.test.ts",
     "src/features/devices/services/terminalIdentity.ts",
     "tests/terminalIdentity.test.ts",
-    "tests/deviceRegistrationFields.test.ts"
+    "tests/deviceRegistrationFields.test.ts",
+    "tests/adminRecords.test.ts"
   ]
 }

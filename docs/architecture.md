@@ -66,6 +66,20 @@ transacción que modifica el dato.
 
 ## Decisiones pendientes
 
+Los módulos `src/pages/Admin/tabs`, `hooks`, `components` y `utils` se
+versionan como preparación de la división del panel. Todavía no sustituyen
+las secciones de `AdminPage.tsx`. Usan la sesión y las listas de `useApp`,
+los adaptadores tipados de `features/admin/domain` y las escrituras de
+`adminManagementRepository`, sujetas a RLS. Los errores de persistencia se
+propagan al formulario antes de cerrarlo. No introducen React Query ni un
+segundo proveedor de autenticación.
+
+Antes de conectar estas pestañas deben completarse la paridad de alta de
+empleados (PIN y asignación de centros), el cambio transaccional del código de
+empresa y la asignación transaccional del contador de empleado. El selector
+de mapa gestiona coordenadas; no declara un radio de fichaje ni un código
+postal que no estén en el contrato actual de `work_centers`.
+
 - `AppContext.tsx` sigue siendo un módulo grande. La migración debe continuar
   por dominio en cambios pequeños para no alterar el MVP: autenticación,
   dispositivos, empleados, fichajes, calendarios y auditoría.

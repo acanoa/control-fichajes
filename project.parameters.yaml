@@ -40,6 +40,12 @@ architecture:
   configuration: src/config
   shared_libraries: src/lib
   database_migrations: supabase/migrations
+  admin_modules:
+    status: prepared_not_routed
+    views: src/pages/Admin/tabs
+    state: src/pages/Admin/hooks
+    contracts: src/features/admin/domain
+    writes: src/repositories/adminManagementRepository.ts
   database_tests: supabase/tests
   rules:
     - Las páginas no construyen consultas complejas.
