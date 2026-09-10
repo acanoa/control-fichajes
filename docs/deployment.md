@@ -24,6 +24,13 @@ web Integra Procesos. Verificar el HTML y sus recursos JavaScript/CSS tanto en
 el origen como en la URL pública. Un fallo de actualización puede dejar la
 versión anterior en servicio aunque `main` ya contenga el cambio.
 
+El origen utiliza el servicio de usuario `control-fichajes.service` de `acanoa`,
+con el proyecto en `/home/acanoa/apps/Control_Fichajes`. Nginx reenvía la ruta a
+Vite Preview en el puerto 8104. La configuración versionada de `preview` conserva
+la base de producción y permite el host `integraprocesos.es`; no es necesario
+editar `vite.config.ts` en el servidor. Las actualizaciones deben seleccionar el
+commit aprobado de `main`, no volver a la etiqueta antigua `v1.0.0`.
+
 ## Variables
 
 El build del navegador sólo admite:

@@ -90,6 +90,9 @@ environments:
     url: https://integraprocesos.es/apps/control-fichajes/
     web_host: 192.168.2.176
     asset_base_path: /apps/control-fichajes/
+    app_directory: /home/acanoa/apps/Control_Fichajes
+    service: user_control-fichajes.service
+    upstream_port: 8104
     secret_store: deployment_platform
     approval_required: true
 
