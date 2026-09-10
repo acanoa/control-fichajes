@@ -1,11 +1,6 @@
-import type { Company, WorkCenter } from '../../../types';
+import type { DeviceRegistrationOptions } from '../domain/registrationOptions';
 import { AppError } from '../../../lib/errors';
 import { supabase } from '../../../integrations/supabase/client';
-
-export interface DeviceRegistrationOptions {
-  companies: Company[];
-  workCenters: WorkCenter[];
-}
 
 export async function listDeviceRegistrationOptions(): Promise<DeviceRegistrationOptions> {
   const { data, error } = await supabase.rpc('list_device_registration_options');
@@ -17,7 +12,7 @@ export async function listDeviceRegistrationOptions(): Promise<DeviceRegistratio
     );
   }
   return {
-    companies: (data.companies ?? []) as Company[],
-    workCenters: (data.work_centers ?? []) as WorkCenter[],
+    companies: data.companies ?? [],
+    workCenters: data.work_centers ?? [],
   };
 }

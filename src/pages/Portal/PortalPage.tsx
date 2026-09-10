@@ -3,11 +3,13 @@ import { useApp } from '../../context/useApp';
 import { Shield, Building, User, Video, AlertTriangle } from 'lucide-react';
 import { listDeviceRegistrationOptions } from '../../features/devices/services/deviceRegistrationService';
 import { logger } from '../../lib/logger';
+import { DeviceRegistrationFields } from '../../components/DeviceRegistrationFields';
+import type { DeviceRegistrationOptions } from '../../features/devices/domain/registrationOptions';
 
 export const PortalPage: React.FC = () => {
   const { 
     currentDevice, isDeviceAuthorized, deviceValidationError, authorizeDevice,
-    loginEmployee, loginAdmin, companies, workCenters 
+    loginEmployee, loginAdmin
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'employee' | 'admin' | 'register'>('employee');
@@ -31,8 +33,10 @@ export const PortalPage: React.FC = () => {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [regError, setRegError] = useState('');
   const [regSuccess, setRegSuccess] = useState('');
-  const [registrationCompanies, setRegistrationCompanies] = useState(companies);
-  const [registrationWorkCenters, setRegistrationWorkCenters] = useState(workCenters);
+  const [registrationOptions, setRegistrationOptions] = useState<DeviceRegistrationOptions>({ companies: [], workCenters: [] });
+  const [optionsLoading, setOptionsLoading] = useState(false);
+  const [optionsError, setOptionsError] = useState('');
+  const [optionsRetry, setOptionsRetry] = useState(0);
 
   // Handle PIN keypad input
   const handleKeypadPress = (val: string) => {
@@ -161,22 +165,25 @@ export const PortalPage: React.FC = () => {
     }
   };
 
-  const filteredCenters = registrationWorkCenters.filter(c => c.company_id === regCompany && c.status === 'active');
-
   useEffect(() => {
     let alive = true;
 
     const loadRegistrationOptions = async () => {
       if (activeTab !== 'register') return;
-      if (registrationCompanies.length > 0 && registrationWorkCenters.length > 0) return;
-
+      setOptionsLoading(true);
+      setOptionsError('');
       try {
         const options = await listDeviceRegistrationOptions();
         if (!alive) return;
-        setRegistrationCompanies(options.companies);
-        setRegistrationWorkCenters(options.workCenters);
+        setRegistrationOptions(options);
+        if (options.companies.length === 0 || options.workCenters.length === 0) {
+          setOptionsError('No hay empresas o centros disponibles para registrar el terminal. Consulta con el administrador.');
+        }
       } catch (error) {
         logger.error('No se pudieron cargar las opciones del terminal.', error);
+        if (alive) setOptionsError('No se pudieron cargar las empresas y centros. Revisa la conexión y pulsa Reintentar.');
+      } finally {
+        if (alive) setOptionsLoading(false);
       }
     };
 
@@ -185,7 +192,7 @@ export const PortalPage: React.FC = () => {
     return () => {
       alive = false;
     };
-  }, [activeTab, registrationCompanies.length, registrationWorkCenters.length, companies, workCenters]);
+  }, [activeTab, optionsRetry]);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center sm:p-4 bg-brand-cream/10 min-h-screen w-full">
@@ -426,38 +433,20 @@ export const PortalPage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-brand-subtext mb-1.5">Empresa</label>
-                  <select
-                    value={regCompany}
-                    onChange={(e) => {
-                      setRegCompany(e.target.value);
-                      setRegCenter('');
-                    }}
-                    className="w-full px-3 py-3 rounded-xl border border-brand-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-maroon text-sm"
-                  >
-                    <option value="">Seleccione...</option>
-                    {companies.filter(c => c.status === 'active').map(c => (
-                      <option key={c.id} value={c.id}>{c.commercial_name}</option>
-                    ))}
-                  </select>
+              {optionsError && (
+                <div role="alert" className="bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-xl text-sm">
+                  <p>{optionsError}</p>
+                  <button type="button" disabled={optionsLoading} onClick={() => setOptionsRetry(value => value + 1)} className="mt-2 font-bold underline">Reintentar</button>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-brand-subtext mb-1.5">Centro de Trabajo</label>
-                  <select
-                    value={regCenter}
-                    onChange={(e) => setRegCenter(e.target.value)}
-                    className="w-full px-3 py-3 rounded-xl border border-brand-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-maroon text-sm"
-                    disabled={!regCompany}
-                  >
-                    <option value="">Seleccione...</option>
-                    {filteredCenters.map(w => (
-                      <option key={w.id} value={w.id}>{w.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              )}
+              <DeviceRegistrationFields
+                options={registrationOptions}
+                companyId={regCompany}
+                centerId={regCenter}
+                loading={optionsLoading}
+                onCompanyChange={id => { setRegCompany(id); setRegCenter(''); }}
+                onCenterChange={setRegCenter}
+              />
 
               {/* Camera Verification Box */}
               <div className="border border-brand-border rounded-xl p-4 bg-brand-cream/10 space-y-3">

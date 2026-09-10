@@ -12,7 +12,6 @@ import { CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { loadAdminSnapshot } from '../repositories/applicationRepository';
 import { logger } from '../lib/logger';
-import { listDeviceRegistrationOptions } from '../features/devices/services/deviceRegistrationService';
 import { checkTerminalStorage, saveTerminalToken, validateStoredTerminal } from '../features/devices/services/terminalIdentity';
 import { AppContext } from './AppContextDefinition';
 
@@ -522,15 +521,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    const loadPublicRegistrationOptions = async () => {
-      const options = await listDeviceRegistrationOptions();
-      if (active) {
-        rawSetCompanies(options.companies);
-        setWorkCenters(options.workCenters);
-      }
-    };
-
-    Promise.all([restoreAdminSession(), loadPublicRegistrationOptions()])
+    restoreAdminSession()
       .catch(error => logger.error('Error restaurando la sesión segura.', error))
       .finally(() => active && setAuthLoading(false));
 

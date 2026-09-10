@@ -168,6 +168,7 @@ database:
     preserve_on_validation_error_or_null: true
     visible_page_refresh_seconds: 15
     admin_display: device_id_only
+    registration_options: public_rpc_minimal_fields_without_status
   immutable_audit_for_critical_changes: true
   generated_types_required: true
   direct_anon_table_privileges: false

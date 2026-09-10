@@ -80,8 +80,8 @@ export interface Database {
         correction_requests: CorrectionRequest[];
       }>;
       list_device_registration_options: FunctionContract<Record<never, never>, {
-        companies: Company[];
-        work_centers: WorkCenter[];
+        companies: Pick<Company, 'id' | 'commercial_name'>[];
+        work_centers: Pick<WorkCenter, 'id' | 'company_id' | 'name'>[];
       }>;
       recalculate_company_hours: FunctionContract<{
         p_company_id: string;

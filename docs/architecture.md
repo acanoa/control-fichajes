@@ -51,6 +51,12 @@ guarda su huella SHA-256 y el campo histórico enmascarado. Si se pierden los da
 del navegador, la huella no permite recuperar el token: debe registrarse y
 aprobarse una nueva identidad desde el terminal. No se autoriza por nombre.
 
+El formulario de registro carga sus propias opciones mediante la RPC pública:
+empresa (`id`, `commercial_name`) y centro (`id`, `company_id`, `name`). Estas
+opciones ya están filtradas por estado activo en PostgreSQL y no tienen `status`.
+No se mezclan con los datos administrativos ni se vuelven a filtrar por estado
+en el navegador. Los errores de carga se muestran con una acción de reintento.
+
 Las RPC son los contratos de backend para operaciones sensibles. Los
 repositorios encapsulan lecturas y escrituras directas sujetas a RLS.
 `AppError` normaliza fallos técnicos y `logger` redacta claves cuyo nombre
